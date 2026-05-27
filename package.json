@@ -19,6 +19,8 @@
     "express-oauth2-jwt-bearer": "^1.6.1",
     "express-rate-limit": "^7.5.0",
     "helmet": "^8.1.0",
-    "pg": "^8.16.0"
+    "pg": "^8.16.0",
+    "swagger-jsdoc": "^6.3.0",
+    "swagger-ui-express": "^5.0.1"
   }
 }

@@ -13,6 +13,7 @@ services:
         value: production
       - key: PORT
         value: 3001
+      # Required — add values in Render Dashboard → Environment (app won't start without them)
       - key: AUTH0_DOMAIN
         sync: false
       - key: AUTH0_AUDIENCE

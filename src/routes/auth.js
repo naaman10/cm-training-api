@@ -5,6 +5,36 @@ import { toSafeUserProfile } from "../db.js";
 const router = Router();
 
 /**
+ * @openapi
+ * /api/auth/me:
+ *   get:
+ *     tags:
+ *       - Auth
+ *     summary: Current approved user profile
+ *     description: |
+ *       Validates Auth0 JWT, then Neon must have an **active** user for `sub`.
+ *       Does not expose `auth0_user_id`; returns profile only.
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       "200":
+ *         description: Active user profile
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 user:
+ *                   $ref: '#/components/schemas/SafeUserProfile'
+ *       "401":
+ *         description: Missing or invalid access token
+ *       "403":
+ *         description: User exists but is not active
+ *       "404":
+ *         description: No Neon profile for this Auth0 subject
+ */
+
+/**
  * GET /api/auth/me
  *
  * Login/session bootstrap for the training portal:

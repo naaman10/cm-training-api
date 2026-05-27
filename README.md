@@ -40,6 +40,14 @@ npm run db:migrate
 npm run dev
 ```
 
+With `NODE_ENV` not equal to `production`, **Swagger UI** is at [http://localhost:3001/api-docs](http://localhost:3001/api-docs).
+
+### Swagger (development only)
+
+- UI: `GET /api-docs` — enabled when **`NODE_ENV` is not `production`** (omit or set `development` locally).
+- New routes live under `src/routes/`; document each endpoint with an **`@openapi`** JSDoc block (YAML path). All files matching `src/routes/**/*.js` are scanned.
+- **Production:** Render sets `NODE_ENV=production`; docs are disabled.
+
 ## Endpoints
 
 | Method | Path | Auth | Description |
@@ -71,10 +79,13 @@ src/
   server.js
   db.js
   loadEnv.js
+  swagger/
+    swagger.js   # swagger-jsdoc spec + Swagger UI mount (non-production only)
   middleware/
     auth.js          # JWT + app user approval
     permissions.js   # requirePermission()
   routes/
+    health.js      # GET /health
     auth.js
     adminUsers.js
 migrations/
@@ -85,4 +96,30 @@ migrations/
 
 Render may default to Node 26+, which `express-oauth2-jwt-bearer` does not support yet. This repo pins **Node 22.12.0** via `.node-version`, `package.json` `engines`, and `NODE_VERSION` in `render.yaml`.
 
-If the dashboard build still uses Yarn and fails, set **Build Command** to `npm ci` (or ensure `package-lock.json` is committed and no `yarn.lock` is present).
+### Required environment variables (Render Dashboard)
+
+These **must** have values in **Render → your service → Environment**. The app exits on startup if any are missing.
+
+| Variable | Example | Purpose |
+|----------|---------|---------|
+| `AUTH0_DOMAIN` | `dev-xxxx.us.auth0.com` | Auth0 tenant |
+| `AUTH0_AUDIENCE` | `https://api.cm-training.app` | Auth0 API **Identifier** (not the SPA client ID) |
+| `DATABASE_URL` | `postgresql://...?sslmode=verify-full` | Neon connection string |
+| `FRONTEND_ORIGIN` | `https://your-app.vercel.app` | Production frontend URL for CORS (no trailing slash) |
+
+Optional:
+
+| Variable | Notes |
+|----------|--------|
+| `PORT` | Render usually sets this automatically; default `3001` if unset |
+| `NODE_ENV` | `production` (often set in `render.yaml`) |
+| `APP_BASE_URL` | **Not used** by this API — safe to omit |
+
+`AUTH0_CLIENT_ID`, `AUTH0_CLIENT_SECRET`, and `AUTH0_SECRET` are for the **frontend** login app, not this API.
+
+### Build / start commands
+
+- **Build:** `npm ci`
+- **Start:** `npm start` (not `yarn start`, unless you maintain a `yarn.lock`)
+
+If the build still uses Yarn, change the start command in the Render dashboard to `npm start`.
