@@ -2,7 +2,7 @@
 
 Express API for the driving instructor training portal. The frontend calls this Render-hosted API; **Auth0** validates identity; **Neon Postgres** stores users, approval status, and **last login**; this API enforces **permissions** from the JWT.
 
-On each **`GET /api/auth/me`**, the API **upserts** the user from the access token and sets **`last_login_at`** (stored as UTC in Neon; responses include **`lastLoginAtUk`** formatted for Europe/London). New users are created with `status = 'pending'` until an administrator sets them to **`active`**.
+On each **`GET /api/auth/me`**, the API **upserts** the user from the access token and sets **`last_login_at`** (stored as UTC in Neon; responses include **`lastLoginAtUk`** formatted for Europe/London). New users are created with **`status = active`** by default. **`403`** on this route means the account was explicitly marked **`suspended`** or **`blocked`** in Neon — not “pending approval.”
 
 Public sign-up is disabled in Auth0; the API does not accept passwords or registration posts.
 
@@ -62,14 +62,14 @@ With `NODE_ENV` not equal to `production`, **Swagger UI** is at [http://localhos
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | `GET` | `/health` | None | Liveness |
-| `GET` | `/api/auth/me` | Bearer token | Upsert user + `last_login_at`; returns profile only if **active** |
+| `GET` | `/api/auth/me` | Bearer token | Upsert user + `last_login_at`; **`403` only if suspended/blocked** |
 | `GET` | `/api/admin/users` | Bearer + `users:read` | List users (admin) |
 
 ### `GET /api/auth/me`
 
 1. Validates Auth0 access token (`express-oauth2-jwt-bearer`).
-2. Upserts Neon row from token (`auth0_user_id` = `sub`), sets **`last_login_at`**, syncs name/email when present. New rows use `status = pending` and `DEFAULT_NEW_USER_ROLE` (default `learner`).
-3. Returns **`403`** if not `active`, **`400`** if first visit and access token has no email claim, **`409`** if email collides with another user.
+2. Upserts Neon row from token (`auth0_user_id` = `sub`), sets **`last_login_at`**, syncs name/email when present. New rows use `status = active` and `DEFAULT_NEW_USER_ROLE` (default `learner`).
+3. Returns **`403`** only if `status` is **`suspended`** or **`blocked`**; **`400`** if first visit and access token has no email claim; **`409`** if email collides with another user.
 4. Returns safe profile (`lastLoginAt` UTC ISO + `lastLoginAtUk` for display).
 
 ### Errors
@@ -78,7 +78,7 @@ With `NODE_ENV` not equal to `production`, **Swagger UI** is at [http://localhos
 |--------|------|
 | `401` | Missing or invalid token |
 | `400` | First login without email on access token |
-| `403` | Inactive user or missing permission |
+| `403` | **`GET /api/auth/me`:** account suspended or blocked. **Admin routes:** missing permission or suspended/blocked |
 | `404` | No Neon profile (rare after sync; e.g. race) |
 | `409` | Email already linked to another Auth0 user |
 | `500` | Server error |
@@ -93,7 +93,7 @@ src/
   swagger/
     swagger.js   # swagger-jsdoc spec + Swagger UI mount (non-production only)
   middleware/
-    auth.js          # JWT + active app user
+    auth.js          # JWT + load user; 403 only suspended/blocked
     syncUserOnLogin.js  # upsert + last_login_at (GET /api/auth/me only)
     permissions.js   # requirePermission()
   routes/

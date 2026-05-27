@@ -13,8 +13,8 @@ const router = Router();
  *       - Auth
  *     summary: Current approved user profile
  *     description: |
- *       Validates Auth0 JWT, upserts Neon user + **last_login_at** (UK-formatted in response),
- *       then requires **active** status. New users are created as `pending` until an admin activates them.
+ *       Validates Auth0 JWT, upserts Neon user + **last_login_at** (UK-formatted in response).
+ *       Returns 200 whenever the profile row exists unless status is **suspended** or **blocked**.
  *       Does not expose `auth0_user_id`; returns profile only.
  *     security:
  *       - bearerAuth: []
@@ -33,7 +33,7 @@ const router = Router();
  *       "401":
  *         description: Missing or invalid access token
  *       "403":
- *         description: User exists but is not active
+ *         description: Account suspended or blocked by admin
  *       "404":
  *         description: No Neon profile for this Auth0 subject
  *       "409":
@@ -46,7 +46,7 @@ const router = Router();
  * Login/session bootstrap for the training portal:
  * 1. Auth0 access token proves identity (checkJwt).
  * 2. Neon row is upserted from token claims; **last_login_at** is set (syncUserOnLogin).
- * 3. User must be **active** in Neon (loadAppUser).
+ * 3. loadAppUser blocks only **suspended** / **blocked** accounts (403).
  * 4. Returns only safe profile fields for the frontend.
  *
  * No passwords or registration are handled here.

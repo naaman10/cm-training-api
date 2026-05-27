@@ -3,7 +3,7 @@ import { upsertUserOnLogin } from "../db.js";
 
 /**
  * Runs on "login bootstrap" (GET /api/auth/me): upserts Neon row from Auth0 claims
- * and sets last_login_at. Does not grant access — loadAppUser still enforces active status.
+ * and sets last_login_at. loadAppUser denies only suspended/blocked accounts (403).
  */
 export async function syncUserOnLogin(req, res, next) {
   try {

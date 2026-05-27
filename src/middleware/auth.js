@@ -1,5 +1,6 @@
 import "../loadEnv.js";
 import { auth } from "express-oauth2-jwt-bearer";
+import { isBlockedAccountStatus } from "../auth/accountStatus.js";
 import { findUserByAuth0Id } from "../db.js";
 
 /**
@@ -12,9 +13,8 @@ export const checkJwt = auth({
 });
 
 /**
- * Neon validates whether the user is approved for the app.
- * A valid Auth0 token alone is not enough — the user must exist and be **active** in our database.
- * (Row creation / last_login refresh happens in syncUserOnLogin on GET /api/auth/me only.)
+ * After JWT validation, Neon must have (or GET /api/auth/me just created via sync) a profile row.
+ * 403 Forbidden is reserved only for admins explicitly marking an account suspended or blocked — not for pending/inactive.
  */
 export async function loadAppUser(req, res, next) {
   try {
@@ -35,10 +35,10 @@ export async function loadAppUser(req, res, next) {
       });
     }
 
-    if (user.status !== "active") {
+    if (isBlockedAccountStatus(user.status)) {
       return res.status(403).json({
         error: "Forbidden",
-        message: "User account is not active",
+        message: "Account suspended or blocked",
       });
     }
 

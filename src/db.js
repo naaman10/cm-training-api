@@ -50,7 +50,7 @@ export async function findUserByAuth0Id(auth0UserId) {
 }
 
 /**
- * Upsert on Auth0 login: create pending user if new, always refresh last_login_at.
+ * Upsert on Auth0 login: create **active** user if new (portal access unless later suspended/blocked).
  * @param {string} auth0UserId
  * @param {{ email: string | null, firstName: string | null, lastName: string | null }} profile
  * @returns {Promise<{ ok: true, user: object } | { ok: false, code: 'MISSING_EMAIL' | 'EMAIL_CONFLICT' }>}
@@ -75,7 +75,7 @@ export async function upsertUserOnLogin(auth0UserId, profile) {
   try {
     const result = await getPool().query(
       `INSERT INTO users (auth0_user_id, email, first_name, last_name, role, status, last_login_at, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, 'pending', NOW(), NOW(), NOW())
+       VALUES ($1, $2, $3, $4, $5, 'active', NOW(), NOW(), NOW())
        ON CONFLICT (auth0_user_id) DO UPDATE SET
          last_login_at = NOW(),
          updated_at = NOW(),
