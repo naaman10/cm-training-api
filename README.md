@@ -80,3 +80,9 @@ src/
 migrations/
   001_create_users_table.sql
 ```
+
+## Deploy on Render
+
+Render may default to Node 26+, which `express-oauth2-jwt-bearer` does not support yet. This repo pins **Node 22.12.0** via `.node-version`, `package.json` `engines`, and `NODE_VERSION` in `render.yaml`.
+
+If the dashboard build still uses Yarn and fails, set **Build Command** to `npm ci` (or ensure `package-lock.json` is committed and no `yarn.lock` is present).
