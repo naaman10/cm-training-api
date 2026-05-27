@@ -37,6 +37,17 @@ const baseDefinition = {
           role: { type: "string" },
           createdAt: { type: "string", format: "date-time" },
           updatedAt: { type: "string", format: "date-time" },
+          lastLoginAt: {
+            type: "string",
+            format: "date-time",
+            nullable: true,
+            description: "UTC instant from Neon (timestamptz)",
+          },
+          lastLoginAtUk: {
+            type: "string",
+            nullable: true,
+            description: "Formatted for Europe/London (en-GB)",
+          },
         },
       },
       SafeAdminUser: {
@@ -50,6 +61,15 @@ const baseDefinition = {
           status: { type: "string", example: "active" },
           createdAt: { type: "string", format: "date-time" },
           updatedAt: { type: "string", format: "date-time" },
+          lastLoginAt: {
+            type: "string",
+            format: "date-time",
+            nullable: true,
+          },
+          lastLoginAtUk: {
+            type: "string",
+            nullable: true,
+          },
         },
       },
     },

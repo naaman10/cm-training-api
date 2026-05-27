@@ -13,7 +13,8 @@ export const checkJwt = auth({
 
 /**
  * Neon validates whether the user is approved for the app.
- * A valid Auth0 token alone is not enough — the user must exist and be active in our database.
+ * A valid Auth0 token alone is not enough — the user must exist and be **active** in our database.
+ * (Row creation / last_login refresh happens in syncUserOnLogin on GET /api/auth/me only.)
  */
 export async function loadAppUser(req, res, next) {
   try {
