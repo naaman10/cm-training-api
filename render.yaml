@@ -20,5 +20,6 @@ services:
         sync: false
       - key: DATABASE_URL
         sync: false
-      - key: FRONTEND_ORIGIN
+      # Optional — must match Auth0 Action custom claim for roles on access token
+      - key: AUTH0_ROLES_CLAIM
         sync: false

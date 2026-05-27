@@ -51,8 +51,10 @@ export async function findUserByAuth0Id(auth0UserId) {
 
 /**
  * Upsert on Auth0 login: create **active** user if new (portal access unless later suspended/blocked).
+ * Role: `rolesFromAuth0` from JWT when AUTH0_ROLES_CLAIM + Action are set; else DEFAULT_NEW_USER_ROLE on insert only.
+ *
  * @param {string} auth0UserId
- * @param {{ email: string | null, firstName: string | null, lastName: string | null }} profile
+ * @param {{ email: string | null, firstName: string | null, lastName: string | null, rolesFromAuth0: string | null }} profile
  * @returns {Promise<{ ok: true, user: object } | { ok: false, code: 'MISSING_EMAIL' | 'EMAIL_CONFLICT' }>}
  */
 export async function upsertUserOnLogin(auth0UserId, profile) {
@@ -61,6 +63,9 @@ export async function upsertUserOnLogin(auth0UserId, profile) {
   const tokenEmail = profile.email?.trim() || null;
   const firstName = profile.firstName ?? null;
   const lastName = profile.lastName ?? null;
+  const tokenRoleNormalized = profile.rolesFromAuth0?.trim()
+    ? profile.rolesFromAuth0.trim()
+    : null;
 
   const existing = await findUserByAuth0Id(auth0UserId);
   const resolvedEmail = tokenEmail || existing?.email || null;
@@ -75,7 +80,7 @@ export async function upsertUserOnLogin(auth0UserId, profile) {
   try {
     const result = await getPool().query(
       `INSERT INTO users (auth0_user_id, email, first_name, last_name, role, status, last_login_at, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, 'active', NOW(), NOW(), NOW())
+       VALUES ($1, $2, $3, $4, COALESCE(NULLIF(TRIM($5), ''), $6), 'active', NOW(), NOW(), NOW())
        ON CONFLICT (auth0_user_id) DO UPDATE SET
          last_login_at = NOW(),
          updated_at = NOW(),
@@ -84,9 +89,17 @@ export async function upsertUserOnLogin(auth0UserId, profile) {
            ELSE users.email
          END,
          first_name = COALESCE(EXCLUDED.first_name, users.first_name),
-         last_name = COALESCE(EXCLUDED.last_name, users.last_name)
+         last_name = COALESCE(EXCLUDED.last_name, users.last_name),
+         role = COALESCE(NULLIF(TRIM($5), ''), users.role)
        RETURNING id, auth0_user_id, email, first_name, last_name, role, status, created_at, updated_at, last_login_at`,
-      [auth0UserId, resolvedEmail, firstName, lastName, defaultRole],
+      [
+        auth0UserId,
+        resolvedEmail,
+        firstName,
+        lastName,
+        tokenRoleNormalized ?? "",
+        defaultRole,
+      ],
     );
     return { ok: true, user: result.rows[0] };
   } catch (e) {

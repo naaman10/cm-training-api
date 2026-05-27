@@ -22,26 +22,44 @@ Configure `.env.local`:
 | `DATABASE_URL` | Neon PostgreSQL connection string |
 | `FRONTEND_ORIGIN` | Allowed CORS origin (frontend URL) |
 | `PORT` | Server port (default `3001`) |
-| `DEFAULT_NEW_USER_ROLE` | Optional. Role for first-time synced users (default `learner`) |
+| `DEFAULT_NEW_USER_ROLE` | Optional. Used when JWT has **no roles claim** (`AUTH0_ROLES_CLAIM`), on **insert only** |
 | `AUTH0_EMAIL_CLAIM` | Optional. Custom access-token claim key for email if not using `email` |
+| `AUTH0_ROLES_CLAIM` | Optional but **recommended** — claim name Auth0 Actions use to put RBAC roles on the **access token** |
 
 ### Auth0 access token (first login)
 
 `GET /api/auth/me` needs an **email** on the access token for **brand-new** users (so Neon can satisfy `email NOT NULL UNIQUE`). Add an **Auth0 Action** on login that copies `event.user.email` into `api.accessToken.setCustomClaim('email', ...)` or ensure the standard **`email`** claim is on the access token for your API audience.
 
+**Roles:** Auth0 RBAC roles are **not** on API access tokens by default. Trigger a Login / Credentials Action for your SPA (and target your API identifier) so the token includes roles, for example namespaced roles as string array:
+
+```js
+exports.onExecutePostLogin = async (event, api) => {
+  const namespace = 'https://your-app.example.com/';
+  if (event.authorization?.roles?.length) {
+    const names = event.authorization.roles.map((r) => r.name);
+    api.accessToken.setCustomClaim(`${namespace}roles`, names);
+  }
+};
+```
+
+Set **`AUTH0_ROLES_CLAIM`** to the full claim key (here `https://your-app.example.com/roles`). The API copies that claim into Neon `role` **on each successful sync** (`users.role` stays unchanged if no claim).
+
 Optional: set `AUTH0_EMAIL_CLAIM` to a custom claim name if you use a namespaced key.
+
+### Database
 
 ```bash
 npm run db:migrate
 ```
 
-### Auth0
+### Auth0 checklist
 
 1. Create an API and set `AUTH0_AUDIENCE` to its identifier.
 2. Add an Action (or Rule) so the **access token** includes **`email`** for that API (required for first-time user row creation).
-3. Enable RBAC and **Add Permissions in the Access Token**.
-4. Add permission `users:read` for the admin list endpoint.
-5. Assign roles/permissions to users as needed.
+3. Add **`AUTH0_ROLES_CLAIM`** and an Action so the access token exposes role names — see snippet above (`namespace/roles`).
+4. Enable RBAC and **Add Permissions in the Access Token**.
+5. Add permission `users:read` for the admin list endpoint.
+6. Assign roles/permissions to users as needed.
 
 ### Run
 
@@ -68,7 +86,7 @@ With `NODE_ENV` not equal to `production`, **Swagger UI** is at [http://localhos
 ### `GET /api/auth/me`
 
 1. Validates Auth0 access token (`express-oauth2-jwt-bearer`).
-2. Upserts Neon row from token (`auth0_user_id` = `sub`), sets **`last_login_at`**, syncs name/email when present. New rows use `status = active` and `DEFAULT_NEW_USER_ROLE` (default `learner`).
+2. Upserts Neon row from token (`auth0_user_id` = `sub`), sets **`last_login_at`**, syncs name/email/`role` from JWT when **`AUTH0_ROLES_CLAIM`** + Action supply roles (else insert uses **`DEFAULT_NEW_USER_ROLE`**).
 3. Returns **`403`** only if `status` is **`suspended`** or **`blocked`**; **`400`** if first visit and access token has no email claim; **`409`** if email collides with another user.
 4. Returns safe profile (`lastLoginAt` UTC ISO + `lastLoginAtUk` for display).
 
