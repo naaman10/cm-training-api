@@ -3,12 +3,17 @@
  * not from the frontend. Never trust client-sent roles or permission claims outside the JWT.
  *
  * @param {string} permission Auth0 API permission (e.g. "users:read")
+ * @param {string[]} [fallbackPermissions] Optional alternatives (e.g. ["admin:all"])
  */
-export function requirePermission(permission) {
+export function requirePermission(permission, fallbackPermissions = []) {
   return (req, res, next) => {
     const tokenPermissions = req.auth?.payload?.permissions;
+    const allowedPermissions = [permission, ...fallbackPermissions];
 
-    if (!Array.isArray(tokenPermissions) || !tokenPermissions.includes(permission)) {
+    if (
+      !Array.isArray(tokenPermissions) ||
+      !allowedPermissions.some((allowed) => tokenPermissions.includes(allowed))
+    ) {
       return res.status(403).json({
         error: "Forbidden",
         message: "Insufficient permissions",

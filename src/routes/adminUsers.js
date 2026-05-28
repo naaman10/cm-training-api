@@ -34,7 +34,7 @@ function validateRequiredString(value) {
  *       - Admin
  *     summary: List users (requires permission)
  *     description: |
- *       Server-side RBAC only: JWT must include `users:read` in **permissions**.
+ *       Server-side RBAC only: JWT must include `users:read` or `admin:all` in **permissions**.
  *       Caller must also be an approved **active** app user.
  *     security:
  *       - bearerAuth: []
@@ -53,7 +53,7 @@ function validateRequiredString(value) {
  *       "401":
  *         description: Missing or invalid access token
  *       "403":
- *         description: Inactive user or missing `users:read` permission
+ *         description: Inactive user or missing `users:read`/`admin:all` permission
  *       "500":
  *         description: Database or server error
  */
@@ -61,7 +61,7 @@ router.get(
   "/users",
   checkJwt,
   loadAppUser,
-  requirePermission("users:read"),
+  requirePermission("users:read", ["admin:all"]),
   requireAdminRole,
   async (req, res, next) => {
     try {
@@ -79,7 +79,7 @@ router.post(
   "/users",
   checkJwt,
   loadAppUser,
-  requirePermission("users:write"),
+  requirePermission("users:write", ["admin:all"]),
   requireAdminRole,
   async (req, res, next) => {
     try {
@@ -128,7 +128,7 @@ router.patch(
   "/users/:id",
   checkJwt,
   loadAppUser,
-  requirePermission("users:write"),
+  requirePermission("users:write", ["admin:all"]),
   requireAdminRole,
   async (req, res, next) => {
     try {
@@ -184,7 +184,7 @@ router.post(
   "/users/:id/deactivate",
   checkJwt,
   loadAppUser,
-  requirePermission("users:write"),
+  requirePermission("users:write", ["admin:all"]),
   requireAdminRole,
   async (req, res, next) => {
     try {
@@ -209,7 +209,7 @@ router.post(
   "/users/:id/password-reset",
   checkJwt,
   loadAppUser,
-  requirePermission("users:write"),
+  requirePermission("users:write", ["admin:all"]),
   requireAdminRole,
   async (req, res, next) => {
     try {
