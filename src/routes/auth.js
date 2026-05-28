@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { checkJwt, loadAppUser } from "../middleware/auth.js";
 import { syncUserOnLogin } from "../middleware/syncUserOnLogin.js";
+import { profileFromAuthPayload } from "../auth/profileFromToken.js";
 import { toSafeUserProfile } from "../db.js";
 
 const router = Router();
@@ -28,6 +29,14 @@ const router = Router();
  *               properties:
  *                 user:
  *                   $ref: '#/components/schemas/SafeUserProfile'
+ *                 auth0RoleClaim:
+ *                   type: string
+ *                   nullable: true
+ *                   description: JWT claim key inspected for roles (`AUTH0_ROLES_CLAIM`)
+ *                 auth0RoleFromToken:
+ *                   type: string
+ *                   nullable: true
+ *                   description: Normalized role value parsed from the JWT claim
  *       "400":
  *         description: First login without email claim on access token
  *       "401":
@@ -53,8 +62,12 @@ const router = Router();
  */
 router.get("/me", checkJwt, syncUserOnLogin, loadAppUser, (req, res) => {
   // Identity from Auth0 (req.auth.payload.sub / .permissions); approval from Neon (req.appUser).
+  const parsed = profileFromAuthPayload(req.auth?.payload ?? {});
+
   res.json({
     user: toSafeUserProfile(req.appUser),
+    auth0RoleClaim: process.env.AUTH0_ROLES_CLAIM ?? null,
+    auth0RoleFromToken: parsed.rolesFromAuth0,
   });
 });
 
