@@ -18,3 +18,26 @@ export function requirePermission(permission) {
     next();
   };
 }
+
+export function requireAdminRole(req, res, next) {
+  const role = req.appUser?.role;
+  if (typeof role !== "string") {
+    return res.status(403).json({
+      error: "Forbidden",
+      message: "Admin role required",
+    });
+  }
+
+  const roles = role
+    .split(",")
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
+  if (!roles.includes("admin")) {
+    return res.status(403).json({
+      error: "Forbidden",
+      message: "Admin role required",
+    });
+  }
+
+  next();
+}

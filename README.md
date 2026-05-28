@@ -19,6 +19,9 @@ Configure `.env.local`:
 |----------|-------------|
 | `AUTH0_DOMAIN` | Auth0 tenant domain |
 | `AUTH0_AUDIENCE` | Auth0 API identifier |
+| `AUTH0_M2M_CLIENT_ID` | Auth0 M2M app client ID (Management API + DB password reset trigger) |
+| `AUTH0_M2M_CLIENT_SECRET` | Auth0 M2M app client secret |
+| `AUTH0_DB_CONNECTION` | Auth0 database connection name (for create user + password reset) |
 | `DATABASE_URL` | Neon PostgreSQL connection string |
 | `FRONTEND_ORIGIN` | Allowed CORS origin (frontend URL) |
 | `PORT` | Server port (default `3001`) |
@@ -82,6 +85,10 @@ With `NODE_ENV` not equal to `production`, **Swagger UI** is at [http://localhos
 | `GET` | `/health` | None | Liveness |
 | `GET` | `/api/auth/me` | Bearer token | Upsert user + `last_login_at`; **`403` only if suspended/blocked** |
 | `GET` | `/api/admin/users` | Bearer + `users:read` | List users (admin) |
+| `POST` | `/api/admin/users` | Bearer + `users:write` + admin role | Create Auth0 user and Neon user row |
+| `PATCH` | `/api/admin/users/:id` | Bearer + `users:write` + admin role | Edit Auth0 profile fields and sync Neon |
+| `POST` | `/api/admin/users/:id/deactivate` | Bearer + `users:write` + admin role | Block in Auth0 and set Neon status to `inactive` |
+| `POST` | `/api/admin/users/:id/password-reset` | Bearer + `users:write` + admin role | Trigger Auth0 reset email and touch Neon `updated_at` |
 
 ### `GET /api/auth/me`
 

@@ -112,11 +112,85 @@ export async function upsertUserOnLogin(auth0UserId, profile) {
 
 export async function findAllUsers() {
   const result = await getPool().query(
-    `SELECT id, email, first_name, last_name, role, status, created_at, updated_at, last_login_at
+    `SELECT id, auth0_user_id, email, first_name, last_name, role, status, created_at, updated_at, last_login_at
      FROM users
      ORDER BY created_at DESC`,
   );
   return result.rows;
+}
+
+/**
+ * @param {string} id
+ */
+export async function findUserById(id) {
+  const result = await getPool().query(
+    `SELECT id, auth0_user_id, email, first_name, last_name, role, status, created_at, updated_at, last_login_at
+     FROM users
+     WHERE id = $1`,
+    [id],
+  );
+  return result.rows[0] ?? null;
+}
+
+/**
+ * @param {{
+ *   auth0UserId: string;
+ *   email: string;
+ *   firstName?: string | null;
+ *   lastName?: string | null;
+ *   role: string;
+ *   status?: string;
+ * }} input
+ */
+export async function createUser(input) {
+  const result = await getPool().query(
+    `INSERT INTO users (auth0_user_id, email, first_name, last_name, role, status, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, COALESCE(NULLIF(TRIM($6), ''), 'active'), NOW(), NOW())
+     RETURNING id, auth0_user_id, email, first_name, last_name, role, status, created_at, updated_at, last_login_at`,
+    [
+      input.auth0UserId,
+      input.email.trim(),
+      input.firstName ?? null,
+      input.lastName ?? null,
+      input.role.trim(),
+      input.status ?? "active",
+    ],
+  );
+  return result.rows[0];
+}
+
+/**
+ * @param {string} id
+ * @param {{
+ *   email?: string;
+ *   firstName?: string | null;
+ *   lastName?: string | null;
+ *   role?: string;
+ *   status?: string;
+ * }} input
+ */
+export async function updateUserById(id, input) {
+  const result = await getPool().query(
+    `UPDATE users
+     SET
+       email = COALESCE($2, email),
+       first_name = COALESCE($3, first_name),
+       last_name = COALESCE($4, last_name),
+       role = COALESCE($5, role),
+       status = COALESCE($6, status),
+       updated_at = NOW()
+     WHERE id = $1
+     RETURNING id, auth0_user_id, email, first_name, last_name, role, status, created_at, updated_at, last_login_at`,
+    [
+      id,
+      input.email?.trim() || null,
+      input.firstName ?? null,
+      input.lastName ?? null,
+      input.role?.trim() || null,
+      input.status?.trim() || null,
+    ],
+  );
+  return result.rows[0] ?? null;
 }
 
 /**
