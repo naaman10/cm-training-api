@@ -1,3 +1,5 @@
+import { randomBytes } from "node:crypto";
+
 const MANAGEMENT_TOKEN_GRANT = "client_credentials";
 
 let cachedToken = null;
@@ -62,12 +64,18 @@ async function managementApi(path, options = {}) {
   });
 }
 
+function createTemporaryPassword() {
+  const randomPart = randomBytes(24).toString("base64url");
+  return `Tmp!${randomPart}aA1`;
+}
+
 export async function auth0CreateUser({ email, firstName, lastName }) {
   const response = await managementApi("/users", {
     method: "POST",
     body: JSON.stringify({
       connection: process.env.AUTH0_DB_CONNECTION,
       email,
+      password: createTemporaryPassword(),
       given_name: firstName || undefined,
       family_name: lastName || undefined,
       email_verified: false,

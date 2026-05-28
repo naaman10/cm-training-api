@@ -148,6 +148,16 @@ router.post(
           status: "active",
         });
 
+        try {
+          await auth0TriggerPasswordReset(auth0Payload.email);
+        } catch (resetError) {
+          console.error("[admin-users:create] password reset trigger failed", {
+            message: resetError.message,
+            status: resetError.status,
+            details: resetError.details,
+          });
+        }
+
         return res.status(201).json({ user: toSafeAdminUser(user) });
       } catch (dbError) {
         try {
