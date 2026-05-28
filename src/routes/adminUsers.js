@@ -17,6 +17,7 @@ import { requireAdminRole, requirePermission } from "../middleware/permissions.j
 
 const router = Router();
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const CREATE_ALLOWED_FIELDS = new Set(["email", "firstName", "lastName", "role"]);
 
 function validateEmail(value) {
   return typeof value === "string" && emailRegex.test(value.trim());
@@ -24,6 +25,27 @@ function validateEmail(value) {
 
 function validateRequiredString(value) {
   return typeof value === "string" && value.trim().length > 0;
+}
+
+function sanitizeCreateBodyForLog(body) {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return { bodyType: typeof body };
+  }
+  const raw = /** @type {Record<string, unknown>} */ (body);
+  return {
+    keys: Object.keys(raw),
+    email: typeof raw.email === "string" ? raw.email.trim() : raw.email,
+    firstName: typeof raw.firstName === "string" ? raw.firstName.trim() : raw.firstName,
+    lastName: typeof raw.lastName === "string" ? raw.lastName.trim() : raw.lastName,
+    role: typeof raw.role === "string" ? raw.role.trim() : raw.role,
+  };
+}
+
+function hasOnlyCreateBodyFields(body) {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return false;
+  }
+  return Object.keys(body).every((key) => CREATE_ALLOWED_FIELDS.has(key));
 }
 
 /**
@@ -83,7 +105,19 @@ router.post(
   requireAdminRole,
   async (req, res, next) => {
     try {
-      const { email, firstName, lastName, role } = req.body ?? {};
+      console.debug(
+        "[admin-users:create] incoming body",
+        sanitizeCreateBodyForLog(req.body),
+      );
+
+      if (!hasOnlyCreateBodyFields(req.body)) {
+        return res.status(400).json({
+          error: "Bad Request",
+          message: "Request body must only include email, firstName, lastName, and role",
+        });
+      }
+
+      const { email, firstName, lastName, role } = req.body;
       if (!validateEmail(email) || !validateRequiredString(role)) {
         return res.status(400).json({
           error: "Bad Request",
@@ -91,28 +125,48 @@ router.post(
         });
       }
 
-      const auth0User = await auth0CreateUser({
+      const auth0Payload = {
         email: email.trim(),
         firstName: firstName?.trim() || null,
         lastName: lastName?.trim() || null,
+      };
+      console.debug("[admin-users:create] auth0 payload", auth0Payload);
+
+      const auth0User = await auth0CreateUser({
+        email: auth0Payload.email,
+        firstName: auth0Payload.firstName,
+        lastName: auth0Payload.lastName,
       });
 
       try {
         const user = await createUser({
           auth0UserId: auth0User.user_id,
-          email: email.trim(),
-          firstName: firstName?.trim() || null,
-          lastName: lastName?.trim() || null,
+          email: auth0Payload.email,
+          firstName: auth0Payload.firstName,
+          lastName: auth0Payload.lastName,
           role: role.trim(),
           status: "active",
         });
 
         return res.status(201).json({ user: toSafeAdminUser(user) });
       } catch (dbError) {
-        await auth0DeleteUser(auth0User.user_id);
+        try {
+          await auth0DeleteUser(auth0User.user_id);
+        } catch (cleanupError) {
+          console.error("[admin-users:create] auth0 cleanup failed", {
+            message: cleanupError.message,
+            status: cleanupError.status,
+            details: cleanupError.details,
+          });
+        }
         throw dbError;
       }
     } catch (error) {
+      console.error("[admin-users:create] create failed", {
+        message: error.message,
+        status: error.status,
+        details: error.details,
+      });
       if (error.status === 409) {
         return res.status(409).json({
           error: "Conflict",
