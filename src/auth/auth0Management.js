@@ -86,14 +86,28 @@ export async function auth0CreateUser({ email, firstName, lastName }) {
 }
 
 export async function auth0UpdateUser(auth0UserId, updates) {
+  /** @type {Record<string, unknown>} */
+  const body = {};
+  if (updates.email !== undefined) {
+    body.email = updates.email;
+  }
+  if (updates.firstName !== undefined) {
+    body.given_name = updates.firstName;
+  }
+  if (updates.lastName !== undefined) {
+    body.family_name = updates.lastName;
+  }
+  if (updates.blocked !== undefined) {
+    body.blocked = updates.blocked;
+  }
+
+  if (Object.keys(body).length === 0) {
+    return null;
+  }
+
   const response = await managementApi(`/users/${encodeURIComponent(auth0UserId)}`, {
     method: "PATCH",
-    body: JSON.stringify({
-      email: updates.email,
-      given_name: updates.firstName,
-      family_name: updates.lastName,
-      blocked: updates.blocked,
-    }),
+    body: JSON.stringify(body),
   });
   return response.json();
 }

@@ -226,7 +226,8 @@ router.patch(
         });
       }
 
-      const { email, firstName, lastName, role } = req.body ?? {};
+      const body = req.body ?? {};
+      const { email, firstName, lastName, role } = body;
       if (email != null && !validateEmail(email)) {
         return res.status(400).json({
           error: "Bad Request",
@@ -240,21 +241,45 @@ router.patch(
         });
       }
 
-      await auth0UpdateUser(existing.auth0_user_id, {
-        email: email?.trim(),
-        firstName: firstName?.trim(),
-        lastName: lastName?.trim(),
-      });
+      /** @type {{ email?: string; firstName?: string | null; lastName?: string | null }} */
+      const auth0ProfileUpdates = {};
+      if (email != null) {
+        auth0ProfileUpdates.email = email.trim();
+      }
+      if (Object.hasOwn(body, "firstName")) {
+        auth0ProfileUpdates.firstName =
+          firstName == null || firstName === ""
+            ? null
+            : String(firstName).trim();
+      }
+      if (Object.hasOwn(body, "lastName")) {
+        auth0ProfileUpdates.lastName =
+          lastName == null || lastName === ""
+            ? null
+            : String(lastName).trim();
+      }
+
+      if (Object.keys(auth0ProfileUpdates).length > 0) {
+        await auth0UpdateUser(existing.auth0_user_id, auth0ProfileUpdates);
+      }
 
       if (role != null) {
         await auth0SyncUserRoles(existing.auth0_user_id, role.trim());
       }
 
       const updated = await updateUserById(req.params.id, {
-        email: email?.trim(),
-        firstName: firstName?.trim() || null,
-        lastName: lastName?.trim() || null,
-        role: role?.trim(),
+        email: email != null ? email.trim() : undefined,
+        firstName: Object.hasOwn(body, "firstName")
+          ? firstName == null || firstName === ""
+            ? null
+            : String(firstName).trim()
+          : undefined,
+        lastName: Object.hasOwn(body, "lastName")
+          ? lastName == null || lastName === ""
+            ? null
+            : String(lastName).trim()
+          : undefined,
+        role: role != null ? role.trim() : undefined,
       });
 
       return res.json({ user: toSafeAdminUser(updated) });
