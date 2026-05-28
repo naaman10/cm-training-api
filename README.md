@@ -63,6 +63,7 @@ npm run db:migrate
 4. Enable RBAC and **Add Permissions in the Access Token**.
 5. Add permission `users:read` for the admin list endpoint.
 6. Assign roles/permissions to users as needed.
+7. For the M2M app (Management API), also grant: `read:roles`, `create:role_memberships`, `delete:role_memberships` — required when admin create/update syncs Auth0 RBAC roles with Neon `users.role`.
 
 ### Run
 
@@ -86,7 +87,7 @@ With `NODE_ENV` not equal to `production`, **Swagger UI** is at [http://localhos
 | `GET` | `/api/auth/me` | Bearer token | Upsert user + `last_login_at`; **`403` only if suspended/blocked** |
 | `GET` | `/api/admin/users` | Bearer + `users:read` | List users (admin) |
 | `POST` | `/api/admin/users` | Bearer + `users:write` + admin role | Create Auth0 user and Neon user row |
-| `PATCH` | `/api/admin/users/:id` | Bearer + `users:write` + admin role | Edit Auth0 profile fields and sync Neon |
+| `PATCH` | `/api/admin/users/:id` | Bearer + `users:write` + admin role | Edit Auth0 profile + RBAC roles and sync Neon |
 | `POST` | `/api/admin/users/:id/deactivate` | Bearer + `users:write` + admin role | Block in Auth0 and set Neon status to `inactive` |
 | `POST` | `/api/admin/users/:id/password-reset` | Bearer + `users:write` + admin role | Trigger Auth0 reset email and touch Neon `updated_at` |
 

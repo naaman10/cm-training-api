@@ -52,7 +52,7 @@ export async function getManagementToken() {
   return cachedToken;
 }
 
-async function managementApi(path, options = {}) {
+export async function managementApi(path, options = {}) {
   const token = await getManagementToken();
   return auth0Request(`/api/v2${path}`, {
     ...options,

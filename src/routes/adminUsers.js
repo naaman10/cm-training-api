@@ -12,6 +12,7 @@ import {
   auth0TriggerPasswordReset,
   auth0UpdateUser,
 } from "../auth/auth0Management.js";
+import { auth0SyncUserRoles } from "../auth/auth0Roles.js";
 import { checkJwt, loadAppUser } from "../middleware/auth.js";
 import { requireAdminRole, requirePermission } from "../middleware/permissions.js";
 
@@ -139,6 +140,21 @@ router.post(
       });
 
       try {
+        await auth0SyncUserRoles(auth0User.user_id, role.trim());
+      } catch (roleError) {
+        try {
+          await auth0DeleteUser(auth0User.user_id);
+        } catch (cleanupError) {
+          console.error("[admin-users:create] auth0 cleanup failed", {
+            message: cleanupError.message,
+            status: cleanupError.status,
+            details: cleanupError.details,
+          });
+        }
+        throw roleError;
+      }
+
+      try {
         const user = await createUser({
           auth0UserId: auth0User.user_id,
           email: auth0Payload.email,
@@ -177,6 +193,12 @@ router.post(
         status: error.status,
         details: error.details,
       });
+      if (error.status === 400) {
+        return res.status(400).json({
+          error: "Bad Request",
+          message: error.message,
+        });
+      }
       if (error.status === 409) {
         return res.status(409).json({
           error: "Conflict",
@@ -224,6 +246,10 @@ router.patch(
         lastName: lastName?.trim(),
       });
 
+      if (role != null) {
+        await auth0SyncUserRoles(existing.auth0_user_id, role.trim());
+      }
+
       const updated = await updateUserById(req.params.id, {
         email: email?.trim(),
         firstName: firstName?.trim() || null,
@@ -233,6 +259,12 @@ router.patch(
 
       return res.json({ user: toSafeAdminUser(updated) });
     } catch (error) {
+      if (error.status === 400) {
+        return res.status(400).json({
+          error: "Bad Request",
+          message: error.message,
+        });
+      }
       if (error.status === 409) {
         return res.status(409).json({
           error: "Conflict",
