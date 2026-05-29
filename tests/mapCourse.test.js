@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { getLessonCount, mapCourseSummary } from "../src/contentful/mapCourse.js";
+import {
+  getLessonCount,
+  mapCourseSummary,
+  mapThumbnail,
+} from "../src/contentful/mapCourse.js";
 
 test("getLessonCount returns 0 when courseLessons missing", () => {
   assert.equal(getLessonCount({ sys: { id: "x" }, fields: {} }), 0);
@@ -16,6 +20,66 @@ test("getLessonCount returns link array length without resolving lessons", () =>
     },
   };
   assert.equal(getLessonCount(entry), 3);
+});
+
+test("mapThumbnail resolves image entry with nested asset field", () => {
+  const thumbnail = mapThumbnail({
+    sys: { type: "Entry", id: "img-1", contentType: { sys: { id: "image" } } },
+    fields: {
+      title: "Course cover",
+      image: {
+        sys: { type: "Asset", id: "asset-1" },
+        fields: {
+          title: "cover.jpg",
+          file: {
+            url: "//images.ctfassets.net/example/cover.jpg",
+            details: { image: { width: 800, height: 450 } },
+          },
+        },
+      },
+    },
+  });
+  assert.equal(thumbnail?.url, "https://images.ctfassets.net/example/cover.jpg");
+  assert.equal(thumbnail?.width, 800);
+  assert.equal(thumbnail?.height, 450);
+});
+
+test("mapThumbnail resolves direct asset link", () => {
+  const thumbnail = mapThumbnail({
+    sys: { type: "Asset", id: "asset-1" },
+    fields: {
+      file: { url: "https://images.ctfassets.net/example/direct.jpg" },
+    },
+  });
+  assert.equal(thumbnail?.url, "https://images.ctfassets.net/example/direct.jpg");
+});
+
+test("mapThumbnail returns null for unresolved link", () => {
+  assert.equal(
+    mapThumbnail({ sys: { type: "Link", linkType: "Entry", id: "img-1" } }),
+    null,
+  );
+});
+
+test("mapCourseSummary includes thumbnail from courseThumbnail image entry", () => {
+  const summary = mapCourseSummary({
+    sys: { id: "course-1" },
+    fields: {
+      courseName: "Course A",
+      courseThumbnail: {
+        sys: { type: "Entry", id: "img-1" },
+        fields: {
+          image: {
+            sys: { type: "Asset", id: "asset-1" },
+            fields: {
+              file: { url: "//images.ctfassets.net/example/thumb.jpg" },
+            },
+          },
+        },
+      },
+    },
+  });
+  assert.equal(summary.thumbnail?.url, "https://images.ctfassets.net/example/thumb.jpg");
 });
 
 test("mapCourseSummary includes lessonCount and sanitized courseRole", () => {

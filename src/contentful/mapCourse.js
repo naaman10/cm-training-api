@@ -1,7 +1,7 @@
 import { sanitizeCourseRole } from "./courseRole.js";
 
 /**
- * @param {{ url?: string } | undefined} file
+ * @param {{ url?: string, details?: { image?: { width?: number, height?: number } } } | undefined} file
  */
 export function resolveAssetUrl(file) {
   if (!file?.url || typeof file.url !== "string") {
@@ -32,39 +32,83 @@ function linkEntryIds(links) {
 }
 
 /**
- * @param {unknown} thumbnailLink Resolved image entry or link
+ * @param {unknown} value
  */
-function mapThumbnail(thumbnailLink) {
-  if (!thumbnailLink || typeof thumbnailLink !== "object") {
+function isAsset(value) {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const sys = /** @type {{ sys?: { type?: string, linkType?: string } }} */ (value).sys;
+  return sys?.type === "Asset" || sys?.linkType === "Asset";
+}
+
+/**
+ * @param {unknown} asset
+ * @returns {{ url: string, title?: string, width?: number, height?: number } | null}
+ */
+function mapAsset(asset) {
+  if (!isAsset(asset)) {
     return null;
   }
-
-  const entry = /** @type {Record<string, unknown>} */ (thumbnailLink);
-  const fields = /** @type {Record<string, unknown>} */ (entry.fields ?? {});
-
-  /** @type {{ fields?: { file?: { url?: string, details?: { image?: { width?: number, height?: number } } } }, title?: string } | undefined} */
-  let asset = fields.file;
-
-  if (!asset?.fields?.file && fields.image && typeof fields.image === "object") {
-    const imageField = /** @type {{ fields?: { file?: typeof asset extends { fields?: { file?: infer F } } ? F : never } } } */ (
-      fields.image
-    );
-    asset = imageField;
-  }
-
-  const file = asset?.fields?.file;
+  const fields = /** @type {{ file?: { url?: string, details?: { image?: { width?: number, height?: number } } }, title?: string } } */ (
+    asset
+  ).fields;
+  const file = fields?.file;
   const url = resolveAssetUrl(file);
   if (!url) {
     return null;
   }
-
   const imageDetails = file?.details?.image;
   return {
     url,
-    title: typeof asset?.title === "string" ? asset.title : undefined,
+    title: typeof fields?.title === "string" ? fields.title : undefined,
     width: imageDetails?.width,
     height: imageDetails?.height,
   };
+}
+
+/**
+ * @param {unknown} fieldValue Asset or entry field containing a linked asset
+ * @returns {{ url: string, title?: string, width?: number, height?: number } | null}
+ */
+function mapThumbnailFromField(fieldValue) {
+  if (!fieldValue || typeof fieldValue !== "object") {
+    return null;
+  }
+
+  if (isAsset(fieldValue)) {
+    return mapAsset(fieldValue);
+  }
+
+  const entry = /** @type {{ fields?: Record<string, unknown> } } */ (fieldValue);
+  if (!entry.fields) {
+    return null;
+  }
+
+  const preferredKeys = ["image", "file", "asset", "media", "thumbnail"];
+  for (const key of preferredKeys) {
+    const mapped = mapThumbnailFromField(entry.fields[key]);
+    if (mapped) {
+      return mapped;
+    }
+  }
+
+  for (const value of Object.values(entry.fields)) {
+    const mapped = mapThumbnailFromField(value);
+    if (mapped) {
+      return mapped;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * courseThumbnail links to an `image` content type entry (or a resolved asset).
+ * @param {unknown} thumbnailLink
+ */
+export function mapThumbnail(thumbnailLink) {
+  return mapThumbnailFromField(thumbnailLink);
 }
 
 /**

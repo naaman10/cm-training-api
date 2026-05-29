@@ -28,7 +28,7 @@ export async function fetchAllCourses() {
   const client = getContentfulDeliveryClient();
   const response = await client.getEntries({
     content_type: getCourseContentType(),
-    include: 2,
+    include: 3,
     order: ["fields.courseName"],
   });
   return response.items;
@@ -41,5 +41,5 @@ export async function fetchAllCourses() {
 export async function fetchCourseById(id) {
   assertContentfulConfigured();
   const client = getContentfulDeliveryClient();
-  return client.getEntry(id, { include: 2 });
+  return client.getEntry(id, { include: 3 });
 }
