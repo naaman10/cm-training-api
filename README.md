@@ -28,6 +28,21 @@ Configure `.env.local`:
 | `DEFAULT_NEW_USER_ROLE` | Optional. Used when JWT has **no roles claim** (`AUTH0_ROLES_CLAIM`), on **insert only** |
 | `AUTH0_EMAIL_CLAIM` | Optional. Custom access-token claim key for email if not using `email` |
 | `AUTH0_ROLES_CLAIM` | Optional but **recommended** — claim name Auth0 Actions use to put RBAC roles on the **access token** |
+| `CONTENTFUL_SPACE_ID` | Contentful space ID (required when using Contentful routes) |
+| `CONTENTFUL_ACCESS_TOKEN` | Content Delivery API access token (published content) |
+| `CONTENTFUL_ENVIRONMENT` | Optional. Contentful environment id (default `master`) |
+| `CONTENTFUL_PREVIEW_ACCESS_TOKEN` | Optional. Preview API token for draft content |
+
+### Contentful
+
+Install is included (`contentful` npm package). Configure delivery credentials in `.env.local`:
+
+- **`CONTENTFUL_SPACE_ID`** — Settings → General settings in Contentful
+- **`CONTENTFUL_ACCESS_TOKEN`** — Settings → API keys → Content delivery / preview → Delivery API token
+- **`CONTENTFUL_ENVIRONMENT`** — optional (default `master`)
+- **`CONTENTFUL_PREVIEW_ACCESS_TOKEN`** — optional; use with `getContentfulPreviewClient()` for draft content
+
+Client helpers live in `src/contentful/client.js` (`getContentfulDeliveryClient`, `getContentfulPreviewClient`). Contentful env vars are **not** required at server startup until you add routes that use them.
 
 ### Auth0 access token (first login)
 
@@ -90,6 +105,17 @@ With `NODE_ENV` not equal to `production`, **Swagger UI** is at [http://localhos
 | `PATCH` | `/api/admin/users/:id` | Bearer + `users:write` + admin role | Edit Auth0 profile + RBAC roles and sync Neon |
 | `POST` | `/api/admin/users/:id/deactivate` | Bearer + `users:write` + admin role | Block in Auth0 and set Neon status to `inactive` |
 | `POST` | `/api/admin/users/:id/password-reset` | Bearer + `users:write` + admin role | Trigger Auth0 reset email and touch Neon `updated_at` |
+| `GET` | `/api/courses` | Bearer token | List courses for caller's role (`lessonCount` only, no lessons) |
+| `GET` | `/api/courses/:id` | Bearer token | Course detail + prerequisites; admins see all courses |
+
+### `GET /api/courses`
+
+1. Validates Auth0 JWT and loads Neon user (`checkJwt`, `loadAppUser`).
+2. Fetches published Contentful `course` entries.
+3. Filters by **courseRole** (sanitized to lowercase): instructors see `instructor` courses, learners see `learner`, **admins see all**.
+4. Returns `{ courses: [...] }` with `lessonCount` (linked lesson count, not lesson content).
+
+Requires `CONTENTFUL_SPACE_ID` and `CONTENTFUL_ACCESS_TOKEN` (returns **503** if unset).
 
 ### `GET /api/auth/me`
 
@@ -122,10 +148,16 @@ src/
     auth.js          # JWT + load user; 403 only suspended/blocked
     syncUserOnLogin.js  # upsert + last_login_at (GET /api/auth/me only)
     permissions.js   # requirePermission()
+  contentful/
+    client.js      # Contentful Delivery / Preview clients
+    courseRole.js  # Role sanitization + access filter
+    mapCourse.js   # Entry → API response shapes
+    fetchCourses.js
   routes/
     health.js      # GET /health
     auth.js
     adminUsers.js
+    courses.js     # GET /api/courses
 migrations/
   001_create_users_table.sql
 ```
@@ -152,6 +184,10 @@ Optional:
 | `PORT` | Render usually sets this automatically; default `3001` if unset |
 | `NODE_ENV` | `production` (often set in `render.yaml`) |
 | `APP_BASE_URL` | **Not used** by this API — safe to omit |
+| `CONTENTFUL_SPACE_ID` | Contentful space (when serving CMS content) |
+| `CONTENTFUL_ACCESS_TOKEN` | Content Delivery API token |
+| `CONTENTFUL_ENVIRONMENT` | e.g. `master` (default if unset) |
+| `CONTENTFUL_PREVIEW_ACCESS_TOKEN` | Preview API token for draft content |
 
 `AUTH0_CLIENT_ID`, `AUTH0_CLIENT_SECRET`, and `AUTH0_SECRET` are for the **frontend** login app, not this API.
 

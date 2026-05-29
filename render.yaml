@@ -23,3 +23,12 @@ services:
       # Optional — must match Auth0 Action custom claim for roles on access token
       - key: AUTH0_ROLES_CLAIM
         sync: false
+      # Optional — Contentful Content Delivery / Preview API
+      - key: CONTENTFUL_SPACE_ID
+        sync: false
+      - key: CONTENTFUL_ACCESS_TOKEN
+        sync: false
+      - key: CONTENTFUL_ENVIRONMENT
+        sync: false
+      - key: CONTENTFUL_PREVIEW_ACCESS_TOKEN
+        sync: false

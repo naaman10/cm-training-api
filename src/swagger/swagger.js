@@ -72,6 +72,69 @@ const baseDefinition = {
           },
         },
       },
+      CourseThumbnail: {
+        type: "object",
+        properties: {
+          url: { type: "string", format: "uri" },
+          title: { type: "string", nullable: true },
+          width: { type: "integer", nullable: true },
+          height: { type: "integer", nullable: true },
+        },
+      },
+      SafeCourseSummary: {
+        type: "object",
+        description:
+          "Course summary from Contentful. lessonCount only — no lesson array.",
+        properties: {
+          id: { type: "string", description: "Contentful entry id" },
+          internalName: { type: "string", nullable: true },
+          courseName: { type: "string", nullable: true },
+          courseDescription: {
+            type: "object",
+            nullable: true,
+            description: "Contentful Rich Text document",
+          },
+          courseRole: {
+            type: "string",
+            nullable: true,
+            enum: ["admin", "instructor", "learner"],
+          },
+          completionCriteria: { type: "integer", nullable: true },
+          lessonCount: {
+            type: "integer",
+            description: "Number of linked lessons (content not included)",
+          },
+          thumbnail: {
+            allOf: [{ $ref: "#/components/schemas/CourseThumbnail" }],
+            nullable: true,
+          },
+          prerequisiteIds: {
+            type: "array",
+            items: { type: "string" },
+          },
+        },
+      },
+      CoursePrerequisite: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          courseName: { type: "string", nullable: true },
+        },
+      },
+      SafeCourseDetail: {
+        allOf: [
+          { $ref: "#/components/schemas/SafeCourseSummary" },
+          {
+            type: "object",
+            properties: {
+              prerequisites: {
+                type: "array",
+                items: { $ref: "#/components/schemas/CoursePrerequisite" },
+              },
+            },
+          },
+        ],
+      },
     },
   },
 };
