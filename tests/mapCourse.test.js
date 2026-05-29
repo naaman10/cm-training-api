@@ -22,6 +22,30 @@ test("getLessonCount returns link array length without resolving lessons", () =>
   assert.equal(getLessonCount(entry), 3);
 });
 
+test("mapThumbnail resolves Cloudinary image field on image entry", () => {
+  const thumbnail = mapThumbnail({
+    sys: { type: "Entry", id: "img-1", contentType: { sys: { id: "image" } } },
+    fields: {
+      altText: "Course cover",
+      image: [
+        {
+          secure_url:
+            "https://res.cloudinary.com/example/image/upload/v1/cover.png",
+          width: 350,
+          height: 200,
+          public_id: "cover",
+        },
+      ],
+    },
+  });
+  assert.equal(
+    thumbnail?.url,
+    "https://res.cloudinary.com/example/image/upload/v1/cover.png",
+  );
+  assert.equal(thumbnail?.width, 350);
+  assert.equal(thumbnail?.height, 200);
+});
+
 test("mapThumbnail resolves image entry with nested asset field", () => {
   const thumbnail = mapThumbnail({
     sys: { type: "Entry", id: "img-1", contentType: { sys: { id: "image" } } },
@@ -61,7 +85,7 @@ test("mapThumbnail returns null for unresolved link", () => {
   );
 });
 
-test("mapCourseSummary includes thumbnail from courseThumbnail image entry", () => {
+test("mapCourseSummary includes thumbnail from courseThumbnail Cloudinary image entry", () => {
   const summary = mapCourseSummary({
     sys: { id: "course-1" },
     fields: {
@@ -69,17 +93,18 @@ test("mapCourseSummary includes thumbnail from courseThumbnail image entry", () 
       courseThumbnail: {
         sys: { type: "Entry", id: "img-1" },
         fields: {
-          image: {
-            sys: { type: "Asset", id: "asset-1" },
-            fields: {
-              file: { url: "//images.ctfassets.net/example/thumb.jpg" },
+          image: [
+            {
+              secure_url: "https://res.cloudinary.com/example/thumb.png",
+              width: 100,
+              height: 50,
             },
-          },
+          ],
         },
       },
     },
   });
-  assert.equal(summary.thumbnail?.url, "https://images.ctfassets.net/example/thumb.jpg");
+  assert.equal(summary.thumbnail?.url, "https://res.cloudinary.com/example/thumb.png");
 });
 
 test("mapCourseSummary includes lessonCount and sanitized courseRole", () => {

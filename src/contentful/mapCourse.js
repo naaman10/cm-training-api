@@ -68,7 +68,37 @@ function mapAsset(asset) {
 }
 
 /**
- * @param {unknown} fieldValue Asset or entry field containing a linked asset
+ * Contentful Cloudinary app stores images as JSON (object or array), not Assets.
+ * @param {unknown} value
+ */
+function mapCloudinaryImage(value) {
+  const item = Array.isArray(value) ? value[0] : value;
+  if (!item || typeof item !== "object") {
+    return null;
+  }
+  const cloudinary = /** @type {{ secure_url?: string, url?: string, width?: number, height?: number, public_id?: string } } */ (
+    item
+  );
+  const url =
+    typeof cloudinary.secure_url === "string"
+      ? cloudinary.secure_url
+      : typeof cloudinary.url === "string"
+        ? cloudinary.url
+        : null;
+  if (!url) {
+    return null;
+  }
+  return {
+    url,
+    title:
+      typeof cloudinary.public_id === "string" ? cloudinary.public_id : undefined,
+    width: typeof cloudinary.width === "number" ? cloudinary.width : undefined,
+    height: typeof cloudinary.height === "number" ? cloudinary.height : undefined,
+  };
+}
+
+/**
+ * @param {unknown} fieldValue Asset, Cloudinary JSON, or entry field containing image data
  * @returns {{ url: string, title?: string, width?: number, height?: number } | null}
  */
 function mapThumbnailFromField(fieldValue) {
@@ -78,6 +108,11 @@ function mapThumbnailFromField(fieldValue) {
 
   if (isAsset(fieldValue)) {
     return mapAsset(fieldValue);
+  }
+
+  const cloudinary = mapCloudinaryImage(fieldValue);
+  if (cloudinary) {
+    return cloudinary;
   }
 
   const entry = /** @type {{ fields?: Record<string, unknown> } } */ (fieldValue);
