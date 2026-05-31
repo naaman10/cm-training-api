@@ -112,6 +112,34 @@ const baseDefinition = {
             type: "array",
             items: { type: "string" },
           },
+          enrollmentStatus: {
+            type: "string",
+            enum: ["available", "enrolled", "completed"],
+          },
+          enrolledAt: {
+            type: "string",
+            format: "date-time",
+            nullable: true,
+          },
+          enrolledAtUk: { type: "string", nullable: true },
+          completedAt: {
+            type: "string",
+            format: "date-time",
+            nullable: true,
+          },
+          completedAtUk: { type: "string", nullable: true },
+        },
+      },
+      CourseEnrollment: {
+        type: "object",
+        properties: {
+          id: { type: "string", format: "uuid" },
+          courseId: { type: "string" },
+          status: { type: "string", enum: ["enrolled", "completed"] },
+          enrolledAt: { type: "string", format: "date-time", nullable: true },
+          enrolledAtUk: { type: "string", nullable: true },
+          completedAt: { type: "string", format: "date-time", nullable: true },
+          completedAtUk: { type: "string", nullable: true },
         },
       },
       CoursePrerequisite: {

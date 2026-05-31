@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   getLessonCount,
+  mapCourseDetail,
   mapCourseSummary,
   mapThumbnail,
 } from "../src/contentful/mapCourse.js";
@@ -122,4 +123,34 @@ test("mapCourseSummary includes lessonCount and sanitized courseRole", () => {
   assert.equal(summary.courseRole, "instructor");
   assert.deepEqual(summary.prerequisiteIds, ["pre-1"]);
   assert.equal(summary.courseName, "Course A");
+});
+
+test("mapCourseDetail includes resolved lessons", () => {
+  const detail = mapCourseDetail({
+    sys: { id: "course-1" },
+    fields: {
+      courseName: "Course A",
+      courseLessons: [
+        {
+          sys: { id: "lesson-1" },
+          fields: {
+            lessonName: "Introduction",
+            lessonDescription: {
+              nodeType: "document",
+              content: [
+                {
+                  nodeType: "paragraph",
+                  content: [{ nodeType: "text", value: "Welcome" }],
+                },
+              ],
+            },
+          },
+        },
+        { sys: { id: "lesson-2" }, fields: { internalName: "Next steps" } },
+      ],
+    },
+  });
+  assert.equal(detail.lessons.length, 2);
+  assert.equal(detail.lessons[0].lessonName, "Introduction");
+  assert.equal(detail.lessons[1].lessonName, "Next steps");
 });

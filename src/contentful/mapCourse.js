@@ -178,6 +178,49 @@ export function mapCourseSummary(entry) {
 }
 
 /**
+ * @param {unknown} lessonLink
+ * @param {number} index
+ */
+function mapLessonSummary(lessonLink, index) {
+  const id = linkEntryId(lessonLink);
+  if (!id) {
+    return null;
+  }
+
+  const resolved =
+    lessonLink && typeof lessonLink === "object" && "fields" in lessonLink
+      ? /** @type {{ fields?: Record<string, unknown> }} */ (lessonLink)
+      : null;
+  const fields = resolved?.fields ?? {};
+
+  const lessonName =
+    (typeof fields.lessonName === "string" && fields.lessonName.trim()) ||
+    (typeof fields.internalName === "string" && fields.internalName.trim()) ||
+    (typeof fields.title === "string" && fields.title.trim()) ||
+    null;
+
+  return {
+    id,
+    order: index + 1,
+    lessonName,
+    lessonDescription: fields.lessonDescription ?? null,
+  };
+}
+
+/**
+ * @param {import('contentful').Entry} entry
+ */
+export function mapCourseLessons(entry) {
+  const lessons = entry.fields?.courseLessons;
+  if (!Array.isArray(lessons)) {
+    return [];
+  }
+  return lessons
+    .map((item, index) => mapLessonSummary(item, index))
+    .filter((lesson) => lesson != null);
+}
+
+/**
  * @param {import('contentful').Entry} entry
  */
 export function mapCourseDetail(entry) {
@@ -206,5 +249,6 @@ export function mapCourseDetail(entry) {
   return {
     ...summary,
     prerequisites,
+    lessons: mapCourseLessons(entry),
   };
 }

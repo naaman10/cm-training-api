@@ -227,3 +227,87 @@ export function toSafeAdminUser(row) {
     ...lastLoginFields(row.last_login_at),
   };
 }
+
+const ENROLLMENT_COLUMNS = `id, user_id, contentful_course_id, status, enrolled_at, completed_at, updated_at`;
+
+/**
+ * @param {string} userId
+ * @param {string} contentfulCourseId
+ */
+export async function createCourseEnrollment(userId, contentfulCourseId) {
+  const result = await getPool().query(
+    `INSERT INTO course_enrollments (user_id, contentful_course_id, status, enrolled_at, updated_at)
+     VALUES ($1, $2, 'enrolled', NOW(), NOW())
+     RETURNING ${ENROLLMENT_COLUMNS}`,
+    [userId, contentfulCourseId],
+  );
+  return result.rows[0];
+}
+
+/**
+ * @param {string} userId
+ * @param {string} contentfulCourseId
+ */
+export async function completeCourseEnrollment(userId, contentfulCourseId) {
+  const result = await getPool().query(
+    `UPDATE course_enrollments
+     SET
+       status = 'completed',
+       completed_at = COALESCE(completed_at, NOW()),
+       updated_at = NOW()
+     WHERE user_id = $1 AND contentful_course_id = $2
+     RETURNING ${ENROLLMENT_COLUMNS}`,
+    [userId, contentfulCourseId],
+  );
+  return result.rows[0] ?? null;
+}
+
+/**
+ * @param {string} userId
+ * @param {string} contentfulCourseId
+ */
+export async function findEnrollmentByUserAndCourse(userId, contentfulCourseId) {
+  const result = await getPool().query(
+    `SELECT ${ENROLLMENT_COLUMNS}
+     FROM course_enrollments
+     WHERE user_id = $1 AND contentful_course_id = $2`,
+    [userId, contentfulCourseId],
+  );
+  return result.rows[0] ?? null;
+}
+
+/**
+ * @param {string} userId
+ * @returns {Promise<Record<string, object>>}
+ */
+export async function findEnrollmentsByUserId(userId) {
+  const result = await getPool().query(
+    `SELECT ${ENROLLMENT_COLUMNS}
+     FROM course_enrollments
+     WHERE user_id = $1`,
+    [userId],
+  );
+  /** @type {Record<string, object>} */
+  const map = {};
+  for (const row of result.rows) {
+    map[row.contentful_course_id] = row;
+  }
+  return map;
+}
+
+/**
+ * @param {Record<string, unknown>} row
+ */
+export function toSafeEnrollment(row) {
+  const enrolled = lastLoginFields(row.enrolled_at);
+  const completed = lastLoginFields(row.completed_at);
+  return {
+    id: row.id,
+    courseId: row.contentful_course_id,
+    status: row.status,
+    enrolledAt: enrolled.lastLoginAt,
+    enrolledAtUk: enrolled.lastLoginAtUk,
+    completedAt: completed.lastLoginAt,
+    completedAtUk: completed.lastLoginAtUk,
+  };
+}

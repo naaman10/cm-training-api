@@ -105,17 +105,24 @@ With `NODE_ENV` not equal to `production`, **Swagger UI** is at [http://localhos
 | `PATCH` | `/api/admin/users/:id` | Bearer + `users:write` + admin role | Edit Auth0 profile + RBAC roles and sync Neon |
 | `POST` | `/api/admin/users/:id/deactivate` | Bearer + `users:write` + admin role | Block in Auth0 and set Neon status to `inactive` |
 | `POST` | `/api/admin/users/:id/password-reset` | Bearer + `users:write` + admin role | Trigger Auth0 reset email and touch Neon `updated_at` |
-| `GET` | `/api/courses` | Bearer token | List courses for caller's role (`lessonCount` only, no lessons) |
-| `GET` | `/api/courses/:id` | Bearer token | Course detail + prerequisites; admins see all courses |
+| `GET` | `/api/courses` | Bearer token | List courses with `enrollmentStatus` per course |
+| `GET` | `/api/courses/:id` | Bearer token | Course detail + prerequisites + enrollment status |
+| `POST` | `/api/courses/:courseId/enroll` | Bearer token | Enroll in a course |
+| `POST` | `/api/courses/:courseId/complete` | Bearer token | Mark enrolled course as completed |
 
 ### `GET /api/courses`
 
 1. Validates Auth0 JWT and loads Neon user (`checkJwt`, `loadAppUser`).
-2. Fetches published Contentful `course` entries.
+2. Fetches published Contentful `course` entries and the caller's rows from `course_enrollments`.
 3. Filters by **courseRole** (sanitized to lowercase): instructors see `instructor` courses, learners see `learner`, **admins see all**.
-4. Returns `{ courses: [...] }` with `lessonCount` (linked lesson count, not lesson content).
+4. Returns `{ courses: [...] }` with `lessonCount` and **`enrollmentStatus`**: `available` | `enrolled` | `completed`.
 
-Requires `CONTENTFUL_SPACE_ID` and `CONTENTFUL_ACCESS_TOKEN` (returns **503** if unset).
+Requires `CONTENTFUL_SPACE_ID` and `CONTENTFUL_ACCESS_TOKEN` (returns **503** if unset). Requires migration `004_create_course_enrollments.sql` for enrollment fields (returns **503** if table missing).
+
+### Course enrollment
+
+- **`POST /api/courses/:courseId/enroll`** — verifies course in Contentful and role access; creates enrollment (`201`). **409** if already enrolled or completed.
+- **`POST /api/courses/:courseId/complete`** — requires existing enrollment; sets `status = completed` (`200`, idempotent if already completed). **404** if not enrolled.
 
 ### `GET /api/auth/me`
 
@@ -153,6 +160,8 @@ src/
     courseRole.js  # Role sanitization + access filter
     mapCourse.js   # Entry → API response shapes
     fetchCourses.js
+  enrollments/
+    enrollmentStatus.js  # available | enrolled | completed on course DTOs
   routes/
     health.js      # GET /health
     auth.js
