@@ -88,6 +88,11 @@ const baseDefinition = {
         properties: {
           id: { type: "string", description: "Contentful entry id" },
           internalName: { type: "string", nullable: true },
+          courseSlug: {
+            type: "string",
+            nullable: true,
+            description: "Unique URL slug from Contentful",
+          },
           courseName: { type: "string", nullable: true },
           courseDescription: {
             type: "object",

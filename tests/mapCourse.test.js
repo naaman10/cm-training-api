@@ -108,6 +108,17 @@ test("mapCourseSummary includes thumbnail from courseThumbnail Cloudinary image 
   assert.equal(summary.thumbnail?.url, "https://res.cloudinary.com/example/thumb.png");
 });
 
+test("mapCourseSummary includes courseSlug", () => {
+  const summary = mapCourseSummary({
+    sys: { id: "course-1" },
+    fields: {
+      courseSlug: "  example-instructor-course  ",
+      courseName: "Course A",
+    },
+  });
+  assert.equal(summary.courseSlug, "example-instructor-course");
+});
+
 test("mapCourseSummary includes lessonCount and sanitized courseRole", () => {
   const summary = mapCourseSummary({
     sys: { id: "course-1" },

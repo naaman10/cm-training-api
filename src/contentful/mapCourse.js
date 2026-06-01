@@ -161,9 +161,15 @@ export function mapCourseSummary(entry) {
   const fields = entry.fields ?? {};
   const courseRole = sanitizeCourseRole(fields.courseRole);
 
+  const courseSlug =
+    typeof fields.courseSlug === "string" && fields.courseSlug.trim()
+      ? fields.courseSlug.trim()
+      : null;
+
   return {
     id: entry.sys.id,
     internalName: fields.internalName ?? null,
+    courseSlug,
     courseName: fields.courseName ?? null,
     courseDescription: fields.courseDescription ?? null,
     courseRole,
