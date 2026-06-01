@@ -154,6 +154,100 @@ const baseDefinition = {
           courseName: { type: "string", nullable: true },
         },
       },
+      SafeLessonSummary: {
+        type: "object",
+        properties: {
+          id: { type: "string", description: "Contentful lesson entry id" },
+          order: { type: "integer" },
+          lessonName: { type: "string", nullable: true },
+          lessonDescription: {
+            type: "object",
+            nullable: true,
+            description: "Contentful Rich Text document",
+          },
+          lessonStatus: {
+            type: "string",
+            enum: ["not_started", "started", "completed"],
+          },
+          startedAt: {
+            type: "string",
+            format: "date-time",
+            nullable: true,
+          },
+          startedAtUk: { type: "string", nullable: true },
+          completedAt: {
+            type: "string",
+            format: "date-time",
+            nullable: true,
+          },
+          completedAtUk: { type: "string", nullable: true },
+        },
+      },
+      SafeAnswer: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          answerText: { type: "string", nullable: true },
+          answerImage: {
+            allOf: [{ $ref: "#/components/schemas/CourseThumbnail" }],
+            nullable: true,
+          },
+        },
+      },
+      SafeQuestion: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          question: { type: "string", nullable: true },
+          questionSummary: { type: "string", nullable: true },
+          correctAnswer: {
+            allOf: [{ $ref: "#/components/schemas/SafeAnswer" }],
+            nullable: true,
+          },
+          incorrectAnswers: {
+            type: "array",
+            items: { $ref: "#/components/schemas/SafeAnswer" },
+          },
+        },
+      },
+      SafeLessonDetail: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          lessonName: { type: "string", nullable: true },
+          lessonDescription: {
+            type: "object",
+            nullable: true,
+            description: "Contentful Rich Text document",
+          },
+          completionCriteria: { type: "integer", nullable: true },
+          questions: {
+            type: "array",
+            items: { $ref: "#/components/schemas/SafeQuestion" },
+          },
+        },
+      },
+      LessonProgress: {
+        type: "object",
+        properties: {
+          lessonStatus: {
+            type: "string",
+            enum: ["not_started", "started", "completed"],
+          },
+          startedAt: {
+            type: "string",
+            format: "date-time",
+            nullable: true,
+          },
+          startedAtUk: { type: "string", nullable: true },
+          completedAt: {
+            type: "string",
+            format: "date-time",
+            nullable: true,
+          },
+          completedAtUk: { type: "string", nullable: true },
+        },
+      },
       SafeCourseDetail: {
         allOf: [
           { $ref: "#/components/schemas/SafeCourseSummary" },
@@ -163,6 +257,10 @@ const baseDefinition = {
               prerequisites: {
                 type: "array",
                 items: { $ref: "#/components/schemas/CoursePrerequisite" },
+              },
+              lessons: {
+                type: "array",
+                items: { $ref: "#/components/schemas/SafeLessonSummary" },
               },
             },
           },

@@ -311,3 +311,98 @@ export function toSafeEnrollment(row) {
     completedAtUk: completed.lastLoginAtUk,
   };
 }
+
+const LESSON_PROGRESS_COLUMNS = `id, user_id, contentful_course_id, contentful_lesson_id, status, started_at, completed_at, updated_at`;
+
+/**
+ * @param {string} userId
+ * @param {string} contentfulCourseId
+ * @param {string} contentfulLessonId
+ * @returns {Promise<{ row: object, created: boolean }>}
+ */
+export async function createOrGetLessonProgress(
+  userId,
+  contentfulCourseId,
+  contentfulLessonId,
+) {
+  const insert = await getPool().query(
+    `INSERT INTO lesson_progress (user_id, contentful_course_id, contentful_lesson_id, status, started_at, updated_at)
+     VALUES ($1, $2, $3, 'started', NOW(), NOW())
+     ON CONFLICT (user_id, contentful_course_id, contentful_lesson_id) DO NOTHING
+     RETURNING ${LESSON_PROGRESS_COLUMNS}`,
+    [userId, contentfulCourseId, contentfulLessonId],
+  );
+  if (insert.rows[0]) {
+    return { row: insert.rows[0], created: true };
+  }
+
+  const existing = await findLessonProgressByUserCourseAndLesson(
+    userId,
+    contentfulCourseId,
+    contentfulLessonId,
+  );
+  if (!existing) {
+    throw new Error("lesson_progress insert conflict but row not found");
+  }
+  return { row: existing, created: false };
+}
+
+/**
+ * @param {string} userId
+ * @param {string} contentfulCourseId
+ * @param {string} contentfulLessonId
+ */
+export async function findLessonProgressByUserCourseAndLesson(
+  userId,
+  contentfulCourseId,
+  contentfulLessonId,
+) {
+  const result = await getPool().query(
+    `SELECT ${LESSON_PROGRESS_COLUMNS}
+     FROM lesson_progress
+     WHERE user_id = $1 AND contentful_course_id = $2 AND contentful_lesson_id = $3`,
+    [userId, contentfulCourseId, contentfulLessonId],
+  );
+  return result.rows[0] ?? null;
+}
+
+/**
+ * @param {string} userId
+ * @param {string} contentfulCourseId
+ * @returns {Promise<Record<string, object>>}
+ */
+export async function findLessonProgressByUserAndCourse(
+  userId,
+  contentfulCourseId,
+) {
+  const result = await getPool().query(
+    `SELECT ${LESSON_PROGRESS_COLUMNS}
+     FROM lesson_progress
+     WHERE user_id = $1 AND contentful_course_id = $2`,
+    [userId, contentfulCourseId],
+  );
+  /** @type {Record<string, object>} */
+  const map = {};
+  for (const row of result.rows) {
+    map[row.contentful_lesson_id] = row;
+  }
+  return map;
+}
+
+/**
+ * @param {Record<string, unknown>} row
+ */
+export function toSafeLessonProgress(row) {
+  const started = lastLoginFields(row.started_at);
+  const completed = lastLoginFields(row.completed_at);
+  return {
+    id: row.id,
+    courseId: row.contentful_course_id,
+    lessonId: row.contentful_lesson_id,
+    status: row.status,
+    startedAt: started.lastLoginAt,
+    startedAtUk: started.lastLoginAtUk,
+    completedAt: completed.lastLoginAt,
+    completedAtUk: completed.lastLoginAtUk,
+  };
+}

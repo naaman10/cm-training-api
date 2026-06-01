@@ -36,10 +36,55 @@ export async function fetchAllCourses() {
 
 /**
  * @param {string} id Contentful entry id
+ * @param {{ include?: number }} [options]
  * @returns {Promise<import('contentful').Entry>}
  */
-export async function fetchCourseById(id) {
+export async function fetchCourseById(id, options = {}) {
   assertContentfulConfigured();
   const client = getContentfulDeliveryClient();
-  return client.getEntry(id, { include: 3 });
+  const include = options.include ?? 3;
+  return client.getEntry(id, { include });
+}
+
+/**
+ * @param {string} courseSlug
+ * @returns {Promise<import('contentful').Entry>}
+ */
+export async function fetchCourseBySlug(courseSlug) {
+  assertContentfulConfigured();
+  const client = getContentfulDeliveryClient();
+  const slug = courseSlug?.trim();
+  if (!slug) {
+    const error = new Error("Course slug is required");
+    error.sys = { id: "NotFound" };
+    throw error;
+  }
+
+  const response = await client.getEntries({
+    content_type: getCourseContentType(),
+    "fields.courseSlug": slug,
+    include: 3,
+    limit: 1,
+  });
+
+  let entry = response.items[0];
+  if (!entry) {
+    const slugLower = slug.toLowerCase();
+    const entries = await fetchAllCourses();
+    entry = entries.find((item) => {
+      const value = item.fields?.courseSlug;
+      return (
+        typeof value === "string" &&
+        value.trim().toLowerCase() === slugLower
+      );
+    });
+  }
+
+  if (!entry) {
+    const error = new Error("Course not found");
+    error.sys = { id: "NotFound" };
+    throw error;
+  }
+
+  return entry;
 }

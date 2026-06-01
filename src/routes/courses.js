@@ -7,16 +7,26 @@ import {
   ContentfulNotConfiguredError,
   fetchAllCourses,
   fetchCourseById,
+  fetchCourseBySlug,
 } from "../contentful/fetchCourses.js";
 import { mapCourseDetail, mapCourseSummary } from "../contentful/mapCourse.js";
+import { mapLessonDetail } from "../contentful/mapLesson.js";
 import {
   completeCourseEnrollment,
   createCourseEnrollment,
+  createOrGetLessonProgress,
   findEnrollmentByUserAndCourse,
   findEnrollmentsByUserId,
+  findLessonProgressByUserAndCourse,
+  findLessonProgressByUserCourseAndLesson,
   toSafeEnrollment,
 } from "../db.js";
 import { attachEnrollmentToCourse } from "../enrollments/enrollmentStatus.js";
+import { loadLessonForEnrolledUser } from "../lessons/courseLessonAccess.js";
+import {
+  attachLessonProgressToCourse,
+  resolveLessonStatus,
+} from "../lessons/lessonStatus.js";
 import { checkJwt, loadAppUser } from "../middleware/auth.js";
 
 const router = Router();
@@ -75,6 +85,55 @@ function handleEnrollmentDbError(error, res, next) {
     });
   }
   next(error);
+}
+
+function handleLessonProgressDbError(error, res, next) {
+  if (error.code === "42P01") {
+    return res.status(503).json({
+      error: "Service Unavailable",
+      message: "Lesson progress is not available. Run database migrations.",
+    });
+  }
+  next(error);
+}
+
+/**
+ * @param {{ error?: string }} result
+ * @param {import('express').Response} res
+ */
+function respondLessonAccessError(result, res) {
+  if (result.error === "course_not_found") {
+    return res.status(404).json({
+      error: "Not Found",
+      message: "Course not found",
+    });
+  }
+  if (result.error === "not_enrolled") {
+    return res.status(404).json({
+      error: "Not Found",
+      message: "Enrollment not found",
+    });
+  }
+  if (result.error === "lesson_not_found") {
+    return res.status(404).json({
+      error: "Not Found",
+      message: "Lesson not found",
+    });
+  }
+  return null;
+}
+
+/**
+ * @param {import('contentful').Entry} entry
+ * @param {string} userId
+ */
+async function mapCourseDetailWithLessonProgress(entry, userId) {
+  const detail = mapCourseDetail(entry);
+  const progressMap = await findLessonProgressByUserAndCourse(
+    userId,
+    entry.sys.id,
+  );
+  return attachLessonProgressToCourse(detail, progressMap);
 }
 
 /**
@@ -160,6 +219,217 @@ router.get("/", checkJwt, loadAppUser, async (req, res, next) => {
  *       "503":
  *         description: Contentful or database unavailable
  */
+/**
+ * @openapi
+ * /api/courses/by-slug/{courseSlug}:
+ *   get:
+ *     tags:
+ *       - Courses
+ *     summary: Get course detail by courseSlug
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: courseSlug
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       "200":
+ *         description: Course detail
+ *       "404":
+ *         description: Course not found or not accessible
+ */
+router.get("/by-slug/:courseSlug", checkJwt, loadAppUser, async (req, res, next) => {
+  try {
+    const courseSlug = req.params.courseSlug?.trim();
+    if (!courseSlug) {
+      return res.status(400).json({
+        error: "Bad Request",
+        message: "Course slug is required",
+      });
+    }
+
+    const entry = await fetchCourseBySlug(courseSlug);
+    const userRoles = getUserRoles(req.appUser);
+    if (!userCanAccessCourse(userRoles, entry.fields?.courseRole)) {
+      return res.status(404).json({
+        error: "Not Found",
+        message: "Course not found",
+      });
+    }
+
+    const enrollment = await findEnrollmentByUserAndCourse(
+      req.appUser.id,
+      entry.sys.id,
+    );
+    const detail = await mapCourseDetailWithLessonProgress(
+      entry,
+      req.appUser.id,
+    );
+    res.json({
+      course: attachEnrollmentToCourse(detail, enrollment),
+    });
+  } catch (error) {
+    if (error.code === "42P01") {
+      return handleLessonProgressDbError(error, res, next);
+    }
+    handleContentfulError(error, res, next);
+  }
+});
+
+/**
+ * @openapi
+ * /api/courses/{courseId}/lessons/{lessonId}:
+ *   get:
+ *     tags:
+ *       - Courses
+ *     summary: Get lesson detail for an enrolled user
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: courseId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: path
+ *         name: lessonId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       "200":
+ *         description: Lesson content with progress status
+ *       "404":
+ *         description: Course, lesson, or enrollment not found
+ *       "503":
+ *         description: Contentful or database unavailable
+ */
+router.get(
+  "/:courseId/lessons/:lessonId",
+  checkJwt,
+  loadAppUser,
+  async (req, res, next) => {
+    try {
+      const { courseId, lessonId } = req.params;
+      const loaded = await loadLessonForEnrolledUser(
+        courseId,
+        lessonId,
+        req.appUser,
+        { include: 4 },
+      );
+      const accessError = respondLessonAccessError(loaded, res);
+      if (accessError) {
+        return accessError;
+      }
+
+      const progress = await findLessonProgressByUserCourseAndLesson(
+        req.appUser.id,
+        courseId,
+        lessonId,
+      );
+
+      res.json({
+        lesson: mapLessonDetail(loaded.lesson),
+        progress: resolveLessonStatus(progress),
+      });
+    } catch (error) {
+      if (error?.sys?.id === "NotFound") {
+        return res.status(404).json({
+          error: "Not Found",
+          message: "Course not found",
+        });
+      }
+      if (
+        error instanceof ContentfulNotConfiguredError ||
+        error.status === 503
+      ) {
+        return handleContentfulError(error, res, next);
+      }
+      return handleLessonProgressDbError(error, res, next);
+    }
+  },
+);
+
+/**
+ * @openapi
+ * /api/courses/{courseId}/lessons/{lessonId}/start:
+ *   post:
+ *     tags:
+ *       - Courses
+ *     summary: Start a lesson (idempotent)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: courseId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: path
+ *         name: lessonId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       "201":
+ *         description: Lesson started for the first time
+ *       "200":
+ *         description: Lesson was already started
+ *       "404":
+ *         description: Course, lesson, or enrollment not found
+ *       "503":
+ *         description: Contentful or database unavailable
+ */
+router.post(
+  "/:courseId/lessons/:lessonId/start",
+  checkJwt,
+  loadAppUser,
+  async (req, res, next) => {
+    try {
+      const { courseId, lessonId } = req.params;
+      const loaded = await loadLessonForEnrolledUser(
+        courseId,
+        lessonId,
+        req.appUser,
+        { include: 4 },
+      );
+      const accessError = respondLessonAccessError(loaded, res);
+      if (accessError) {
+        return accessError;
+      }
+
+      const { row, created } = await createOrGetLessonProgress(
+        req.appUser.id,
+        courseId,
+        lessonId,
+      );
+
+      const body = {
+        lesson: mapLessonDetail(loaded.lesson),
+        progress: resolveLessonStatus(row),
+      };
+
+      return res.status(created ? 201 : 200).json(body);
+    } catch (error) {
+      if (error?.sys?.id === "NotFound") {
+        return res.status(404).json({
+          error: "Not Found",
+          message: "Course not found",
+        });
+      }
+      if (
+        error instanceof ContentfulNotConfiguredError ||
+        error.status === 503
+      ) {
+        return handleContentfulError(error, res, next);
+      }
+      return handleLessonProgressDbError(error, res, next);
+    }
+  },
+);
+
 router.post(
   "/:courseId/enroll",
   checkJwt,
@@ -320,10 +590,17 @@ router.get("/:id", checkJwt, loadAppUser, async (req, res, next) => {
       req.appUser.id,
       entry.sys.id,
     );
+    const detail = await mapCourseDetailWithLessonProgress(
+      entry,
+      req.appUser.id,
+    );
     res.json({
-      course: attachEnrollmentToCourse(mapCourseDetail(entry), enrollment),
+      course: attachEnrollmentToCourse(detail, enrollment),
     });
   } catch (error) {
+    if (error.code === "42P01") {
+      return handleLessonProgressDbError(error, res, next);
+    }
     handleContentfulError(error, res, next);
   }
 });
