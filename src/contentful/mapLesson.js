@@ -129,3 +129,95 @@ export function findLessonOnCourse(courseEntry, lessonId) {
   }
   return null;
 }
+
+/**
+ * Ordered Contentful question entry ids from a lesson link or entry.
+ * @param {unknown} lessonEntry
+ * @returns {string[]}
+ */
+export function getOrderedQuestionIds(lessonEntry) {
+  if (!lessonEntry || typeof lessonEntry !== "object") {
+    return [];
+  }
+  const fields = /** @type {{ fields?: { questions?: unknown[] } }} */ (
+    lessonEntry
+  ).fields;
+  const questions = fields?.questions;
+  if (!Array.isArray(questions)) {
+    return [];
+  }
+  return questions
+    .map((item) => linkEntryId(item))
+    .filter((id) => typeof id === "string");
+}
+
+/**
+ * @param {unknown} lessonLink
+ */
+export function getQuestionCountFromLesson(lessonLink) {
+  return getOrderedQuestionIds(lessonLink).length;
+}
+
+/**
+ * Collect valid answer ids for a question link/entry.
+ * @param {unknown} questionLink
+ * @returns {Set<string>}
+ */
+function validAnswerIdsForQuestion(questionLink) {
+  const ids = new Set();
+  if (!questionLink || typeof questionLink !== "object") {
+    return ids;
+  }
+  const fields = /** @type {{ fields?: Record<string, unknown> }} */ (
+    questionLink
+  ).fields;
+  if (!fields) {
+    return ids;
+  }
+
+  const correctId = linkEntryId(fields.correctAnswer);
+  if (correctId) {
+    ids.add(correctId);
+  }
+
+  const incorrect = fields.incorrectAnswers;
+  if (Array.isArray(incorrect)) {
+    for (const item of incorrect) {
+      const id = linkEntryId(item);
+      if (id) {
+        ids.add(id);
+      }
+    }
+  }
+  return ids;
+}
+
+/**
+ * @param {unknown} lessonEntry
+ * @param {string} questionId
+ * @param {string} answerId
+ */
+export function isValidAnswerForLessonQuestion(
+  lessonEntry,
+  questionId,
+  answerId,
+) {
+  if (!lessonEntry || typeof lessonEntry !== "object") {
+    return false;
+  }
+  const fields = /** @type {{ fields?: { questions?: unknown[] } }} */ (
+    lessonEntry
+  ).fields;
+  const questions = fields?.questions;
+  if (!Array.isArray(questions)) {
+    return false;
+  }
+
+  for (const item of questions) {
+    if (linkEntryId(item) !== questionId) {
+      continue;
+    }
+    return validAnswerIdsForQuestion(item).has(answerId);
+  }
+  return false;
+}

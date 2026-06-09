@@ -10,23 +10,22 @@ import {
   fetchCourseBySlug,
 } from "../contentful/fetchCourses.js";
 import { mapCourseDetail, mapCourseSummary } from "../contentful/mapCourse.js";
-import { mapLessonDetail } from "../contentful/mapLesson.js";
+import { isValidAnswerForLessonQuestion } from "../contentful/mapLesson.js";
 import {
   completeCourseEnrollment,
+  countLessonAnswersByCourse,
   createCourseEnrollment,
   createOrGetLessonProgress,
   findEnrollmentByUserAndCourse,
   findEnrollmentsByUserId,
   findLessonProgressByUserAndCourse,
-  findLessonProgressByUserCourseAndLesson,
   toSafeEnrollment,
+  upsertLessonQuestionAnswer,
 } from "../db.js";
 import { attachEnrollmentToCourse } from "../enrollments/enrollmentStatus.js";
 import { loadLessonForEnrolledUser } from "../lessons/courseLessonAccess.js";
-import {
-  attachLessonProgressToCourse,
-  resolveLessonStatus,
-} from "../lessons/lessonStatus.js";
+import { buildLessonResponse } from "../lessons/lessonResponse.js";
+import { attachLessonProgressToCourse } from "../lessons/lessonStatus.js";
 import { checkJwt, loadAppUser } from "../middleware/auth.js";
 
 const router = Router();
@@ -129,11 +128,16 @@ function respondLessonAccessError(result, res) {
  */
 async function mapCourseDetailWithLessonProgress(entry, userId) {
   const detail = mapCourseDetail(entry);
-  const progressMap = await findLessonProgressByUserAndCourse(
-    userId,
-    entry.sys.id,
+  const [progressMap, answeredCountMap] = await Promise.all([
+    findLessonProgressByUserAndCourse(userId, entry.sys.id),
+    countLessonAnswersByCourse(userId, entry.sys.id),
+  ]);
+  return attachLessonProgressToCourse(
+    detail,
+    progressMap,
+    answeredCountMap,
+    entry,
   );
-  return attachLessonProgressToCourse(detail, progressMap);
 }
 
 /**
@@ -324,16 +328,14 @@ router.get(
         return accessError;
       }
 
-      const progress = await findLessonProgressByUserCourseAndLesson(
+      const body = await buildLessonResponse(
         req.appUser.id,
         courseId,
         lessonId,
+        loaded.lesson,
       );
 
-      res.json({
-        lesson: mapLessonDetail(loaded.lesson),
-        progress: resolveLessonStatus(progress),
-      });
+      res.json(body);
     } catch (error) {
       if (error?.sys?.id === "NotFound") {
         return res.status(404).json({
@@ -406,10 +408,136 @@ router.post(
         lessonId,
       );
 
-      const body = {
-        lesson: mapLessonDetail(loaded.lesson),
-        progress: resolveLessonStatus(row),
-      };
+      const body = await buildLessonResponse(
+        req.appUser.id,
+        courseId,
+        lessonId,
+        loaded.lesson,
+        row,
+      );
+
+      return res.status(created ? 201 : 200).json(body);
+    } catch (error) {
+      if (error?.sys?.id === "NotFound") {
+        return res.status(404).json({
+          error: "Not Found",
+          message: "Course not found",
+        });
+      }
+      if (
+        error instanceof ContentfulNotConfiguredError ||
+        error.status === 503
+      ) {
+        return handleContentfulError(error, res, next);
+      }
+      return handleLessonProgressDbError(error, res, next);
+    }
+  },
+);
+
+/**
+ * @openapi
+ * /api/courses/{courseId}/lessons/{lessonId}/answers:
+ *   post:
+ *     tags:
+ *       - Courses
+ *     summary: Save the user's answer for a lesson question
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: courseId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: path
+ *         name: lessonId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - questionId
+ *               - answerId
+ *             properties:
+ *               questionId:
+ *                 type: string
+ *               answerId:
+ *                 type: string
+ *     responses:
+ *       "201":
+ *         description: Answer saved for the first time for this question
+ *       "200":
+ *         description: Answer updated or unchanged
+ *       "400":
+ *         description: Invalid question or answer
+ *       "404":
+ *         description: Course, lesson, or enrollment not found
+ *       "503":
+ *         description: Contentful or database unavailable
+ */
+router.post(
+  "/:courseId/lessons/:lessonId/answers",
+  checkJwt,
+  loadAppUser,
+  async (req, res, next) => {
+    try {
+      const { courseId, lessonId } = req.params;
+      const questionId =
+        typeof req.body?.questionId === "string"
+          ? req.body.questionId.trim()
+          : "";
+      const answerId =
+        typeof req.body?.answerId === "string" ? req.body.answerId.trim() : "";
+
+      if (!questionId || !answerId) {
+        return res.status(400).json({
+          error: "Bad Request",
+          message: "questionId and answerId are required",
+        });
+      }
+
+      const loaded = await loadLessonForEnrolledUser(
+        courseId,
+        lessonId,
+        req.appUser,
+        { include: 4 },
+      );
+      const accessError = respondLessonAccessError(loaded, res);
+      if (accessError) {
+        return accessError;
+      }
+
+      if (
+        !isValidAnswerForLessonQuestion(loaded.lesson, questionId, answerId)
+      ) {
+        return res.status(400).json({
+          error: "Bad Request",
+          message: "Invalid questionId or answerId for this lesson",
+        });
+      }
+
+      await createOrGetLessonProgress(req.appUser.id, courseId, lessonId);
+
+      const { created } = await upsertLessonQuestionAnswer(
+        req.appUser.id,
+        courseId,
+        lessonId,
+        questionId,
+        answerId,
+      );
+
+      const body = await buildLessonResponse(
+        req.appUser.id,
+        courseId,
+        lessonId,
+        loaded.lesson,
+      );
 
       return res.status(created ? 201 : 200).json(body);
     } catch (error) {

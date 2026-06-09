@@ -1,3 +1,4 @@
+import { getQuestionCountFromLesson } from "../contentful/mapLesson.js";
 import { lastLoginFields } from "../db.js";
 
 /**
@@ -48,26 +49,63 @@ export function attachLessonProgress(lessonSummary, progressRow) {
 }
 
 /**
+ * @param {Record<string, unknown>} lessonSummary
+ * @param {{ status?: string, started_at?: Date | string, completed_at?: Date | string | null } | null | undefined} progressRow
+ * @param {unknown} lessonLink
+ * @param {number} answeredCount
+ */
+export function attachLessonProgressWithCounts(
+  lessonSummary,
+  progressRow,
+  lessonLink,
+  answeredCount,
+) {
+  const questionCount = getQuestionCountFromLesson(lessonLink);
+  return {
+    ...lessonSummary,
+    ...resolveLessonStatus(progressRow),
+    questionCount,
+    answeredCount,
+  };
+}
+
+/**
  * @param {Record<string, unknown>} courseDetail
  * @param {Record<string, object>} progressByLessonId
+ * @param {Record<string, number>} answeredCountByLessonId
+ * @param {import('contentful').Entry} courseEntry
  */
-export function attachLessonProgressToCourse(courseDetail, progressByLessonId) {
+export function attachLessonProgressToCourse(
+  courseDetail,
+  progressByLessonId,
+  answeredCountByLessonId,
+  courseEntry,
+) {
   const lessons = courseDetail.lessons;
   if (!Array.isArray(lessons)) {
     return courseDetail;
   }
 
+  const rawLessons = courseEntry.fields?.courseLessons;
+  const lessonLinks = Array.isArray(rawLessons) ? rawLessons : [];
+
   return {
     ...courseDetail,
-    lessons: lessons.map((lesson) => {
+    lessons: lessons.map((lesson, index) => {
       const lessonId =
         lesson && typeof lesson === "object" && "id" in lesson
           ? /** @type {{ id: string }} */ (lesson).id
           : null;
       const progress = lessonId ? progressByLessonId[lessonId] : undefined;
-      return attachLessonProgress(
+      const answeredCount = lessonId
+        ? (answeredCountByLessonId[lessonId] ?? 0)
+        : 0;
+      const lessonLink = lessonLinks[index] ?? null;
+      return attachLessonProgressWithCounts(
         /** @type {Record<string, unknown>} */ (lesson),
         progress,
+        lessonLink,
+        answeredCount,
       );
     }),
   };

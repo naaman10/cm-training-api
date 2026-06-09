@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   findLessonOnCourse,
+  getOrderedQuestionIds,
+  isValidAnswerForLessonQuestion,
   mapLessonDetail,
 } from "../src/contentful/mapLesson.js";
 
@@ -80,4 +82,34 @@ test("mapLessonDetail returns empty questions when none linked", () => {
   });
   assert.equal(lesson.lessonName, "Draft");
   assert.deepEqual(lesson.questions, []);
+});
+
+test("isValidAnswerForLessonQuestion accepts correct and incorrect answers", () => {
+  const lesson = {
+    sys: { id: "lesson-1" },
+    fields: {
+      questions: [
+        {
+          sys: { id: "q-1" },
+          fields: {
+            correctAnswer: { sys: { id: "a-correct" } },
+            incorrectAnswers: [{ sys: { id: "a-wrong" } }],
+          },
+        },
+      ],
+    },
+  };
+  assert.equal(isValidAnswerForLessonQuestion(lesson, "q-1", "a-correct"), true);
+  assert.equal(isValidAnswerForLessonQuestion(lesson, "q-1", "a-wrong"), true);
+  assert.equal(isValidAnswerForLessonQuestion(lesson, "q-1", "a-other"), false);
+  assert.equal(isValidAnswerForLessonQuestion(lesson, "q-missing", "a-correct"), false);
+});
+
+test("getOrderedQuestionIds preserves Contentful order", () => {
+  const lesson = {
+    fields: {
+      questions: [{ sys: { id: "q2" } }, { sys: { id: "q1" } }],
+    },
+  };
+  assert.deepEqual(getOrderedQuestionIds(lesson), ["q2", "q1"]);
 });

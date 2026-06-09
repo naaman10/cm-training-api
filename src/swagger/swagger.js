@@ -181,6 +181,8 @@ const baseDefinition = {
             nullable: true,
           },
           completedAtUk: { type: "string", nullable: true },
+          questionCount: { type: "integer" },
+          answeredCount: { type: "integer" },
         },
       },
       SafeAnswer: {
@@ -227,6 +229,19 @@ const baseDefinition = {
           },
         },
       },
+      LessonQuestionAnswer: {
+        type: "object",
+        properties: {
+          questionId: { type: "string" },
+          answerId: { type: "string" },
+          answeredAt: {
+            type: "string",
+            format: "date-time",
+            nullable: true,
+          },
+          answeredAtUk: { type: "string", nullable: true },
+        },
+      },
       LessonProgress: {
         type: "object",
         properties: {
@@ -246,6 +261,21 @@ const baseDefinition = {
             nullable: true,
           },
           completedAtUk: { type: "string", nullable: true },
+          questionCount: { type: "integer" },
+          answeredCount: { type: "integer" },
+          nextQuestionIndex: {
+            type: "integer",
+            description:
+              "0-based index of first unanswered question; equals questionCount when all answered",
+          },
+          answeredQuestionIds: {
+            type: "array",
+            items: { type: "string" },
+          },
+          answers: {
+            type: "array",
+            items: { $ref: "#/components/schemas/LessonQuestionAnswer" },
+          },
         },
       },
       SafeCourseDetail: {

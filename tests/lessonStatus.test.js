@@ -53,9 +53,26 @@ test("attachLessonProgressToCourse merges progress into lessons", () => {
         completed_at: null,
       },
     },
+    { "lesson-1": 2 },
+    {
+      sys: { id: "course-1" },
+      fields: {
+        courseLessons: [
+          {
+            sys: { id: "lesson-1" },
+            fields: { questions: [{ sys: { id: "q1" } }, { sys: { id: "q2" } }] },
+          },
+          { sys: { id: "lesson-2" }, fields: { questions: [{ sys: { id: "q3" } }] } },
+        ],
+      },
+    },
   );
   assert.equal(course.lessons[0].lessonStatus, "started");
+  assert.equal(course.lessons[0].questionCount, 2);
+  assert.equal(course.lessons[0].answeredCount, 2);
   assert.equal(course.lessons[1].lessonStatus, "not_started");
+  assert.equal(course.lessons[1].questionCount, 1);
+  assert.equal(course.lessons[1].answeredCount, 0);
 });
 
 test("attachLessonProgress merges onto lesson summary", () => {

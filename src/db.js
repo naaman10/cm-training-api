@@ -406,3 +406,148 @@ export function toSafeLessonProgress(row) {
     completedAtUk: completed.lastLoginAtUk,
   };
 }
+
+const LESSON_ANSWER_COLUMNS = `id, user_id, contentful_course_id, contentful_lesson_id, contentful_question_id, contentful_answer_id, answered_at, updated_at`;
+
+/**
+ * @param {string} userId
+ * @param {string} contentfulCourseId
+ * @param {string} contentfulLessonId
+ * @param {string} contentfulQuestionId
+ * @param {string} contentfulAnswerId
+ * @returns {Promise<{ row: object, created: boolean }>}
+ */
+export async function upsertLessonQuestionAnswer(
+  userId,
+  contentfulCourseId,
+  contentfulLessonId,
+  contentfulQuestionId,
+  contentfulAnswerId,
+) {
+  const existing = await findLessonQuestionAnswer(
+    userId,
+    contentfulCourseId,
+    contentfulLessonId,
+    contentfulQuestionId,
+  );
+  if (!existing) {
+    const insert = await getPool().query(
+      `INSERT INTO lesson_question_answers (
+         user_id, contentful_course_id, contentful_lesson_id,
+         contentful_question_id, contentful_answer_id, answered_at, updated_at
+       )
+       VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+       RETURNING ${LESSON_ANSWER_COLUMNS}`,
+      [
+        userId,
+        contentfulCourseId,
+        contentfulLessonId,
+        contentfulQuestionId,
+        contentfulAnswerId,
+      ],
+    );
+    return { row: insert.rows[0], created: true };
+  }
+
+  if (existing.contentful_answer_id === contentfulAnswerId) {
+    return { row: existing, created: false };
+  }
+
+  const update = await getPool().query(
+    `UPDATE lesson_question_answers
+     SET contentful_answer_id = $5, answered_at = NOW(), updated_at = NOW()
+     WHERE user_id = $1
+       AND contentful_course_id = $2
+       AND contentful_lesson_id = $3
+       AND contentful_question_id = $4
+     RETURNING ${LESSON_ANSWER_COLUMNS}`,
+    [
+      userId,
+      contentfulCourseId,
+      contentfulLessonId,
+      contentfulQuestionId,
+      contentfulAnswerId,
+    ],
+  );
+  return { row: update.rows[0], created: false };
+}
+
+/**
+ * @param {string} userId
+ * @param {string} contentfulCourseId
+ * @param {string} contentfulLessonId
+ * @param {string} contentfulQuestionId
+ */
+export async function findLessonQuestionAnswer(
+  userId,
+  contentfulCourseId,
+  contentfulLessonId,
+  contentfulQuestionId,
+) {
+  const result = await getPool().query(
+    `SELECT ${LESSON_ANSWER_COLUMNS}
+     FROM lesson_question_answers
+     WHERE user_id = $1
+       AND contentful_course_id = $2
+       AND contentful_lesson_id = $3
+       AND contentful_question_id = $4`,
+    [userId, contentfulCourseId, contentfulLessonId, contentfulQuestionId],
+  );
+  return result.rows[0] ?? null;
+}
+
+/**
+ * @param {string} userId
+ * @param {string} contentfulCourseId
+ * @param {string} contentfulLessonId
+ */
+export async function findLessonQuestionAnswersByLesson(
+  userId,
+  contentfulCourseId,
+  contentfulLessonId,
+) {
+  const result = await getPool().query(
+    `SELECT ${LESSON_ANSWER_COLUMNS}
+     FROM lesson_question_answers
+     WHERE user_id = $1
+       AND contentful_course_id = $2
+       AND contentful_lesson_id = $3
+     ORDER BY answered_at ASC`,
+    [userId, contentfulCourseId, contentfulLessonId],
+  );
+  return result.rows;
+}
+
+/**
+ * @param {string} userId
+ * @param {string} contentfulCourseId
+ * @returns {Promise<Record<string, number>>}
+ */
+export async function countLessonAnswersByCourse(userId, contentfulCourseId) {
+  const result = await getPool().query(
+    `SELECT contentful_lesson_id, COUNT(*)::int AS answered_count
+     FROM lesson_question_answers
+     WHERE user_id = $1 AND contentful_course_id = $2
+     GROUP BY contentful_lesson_id`,
+    [userId, contentfulCourseId],
+  );
+  /** @type {Record<string, number>} */
+  const map = {};
+  for (const row of result.rows) {
+    map[row.contentful_lesson_id] = row.answered_count;
+  }
+  return map;
+}
+
+/**
+ * @param {Record<string, unknown>} row
+ */
+export function toSafeLessonQuestionAnswer(row) {
+  const answered = lastLoginFields(row.answered_at);
+  return {
+    questionId: row.contentful_question_id,
+    answerId: row.contentful_answer_id,
+    answeredAt: answered.lastLoginAt,
+    answeredAtUk: answered.lastLoginAtUk,
+  };
+}
