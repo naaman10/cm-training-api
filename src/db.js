@@ -551,3 +551,209 @@ export function toSafeLessonQuestionAnswer(row) {
     answeredAtUk: answered.lastLoginAtUk,
   };
 }
+
+// ============================================================================
+// Feature Permissions
+// ============================================================================
+
+/**
+ * Check if a user has access to a specific feature.
+ * @param {string} userId
+ * @param {string} featureName
+ * @returns {Promise<boolean>}
+ */
+export async function checkUserFeatureAccess(userId, featureName) {
+  const result = await getPool().query(
+    `SELECT 1
+     FROM user_permissions up
+     INNER JOIN features f ON f.id = up.feature_id
+     WHERE up.user_id = $1 AND f.name = $2 AND f.is_active = true`,
+    [userId, featureName],
+  );
+  return result.rows.length > 0;
+}
+
+/**
+ * Grant a user access to a feature.
+ * @param {string} userId
+ * @param {string} featureName
+ * @param {string | null} grantedBy Admin user ID who granted the permission
+ * @returns {Promise<object>}
+ */
+export async function grantUserFeatureAccess(userId, featureName, grantedBy = null) {
+  const result = await getPool().query(
+    `INSERT INTO user_permissions (user_id, feature_id, granted_by, granted_at)
+     SELECT $1, f.id, $3, NOW()
+     FROM features f
+     WHERE f.name = $2
+     ON CONFLICT (user_id, feature_id) DO UPDATE SET
+       granted_at = NOW(),
+       granted_by = COALESCE(EXCLUDED.granted_by, user_permissions.granted_by)
+     RETURNING id, user_id, feature_id, granted_at, granted_by`,
+    [userId, featureName, grantedBy],
+  );
+  return result.rows[0];
+}
+
+/**
+ * Revoke a user's access to a feature.
+ * @param {string} userId
+ * @param {string} featureName
+ * @returns {Promise<boolean>} True if a permission was deleted
+ */
+export async function revokeUserFeatureAccess(userId, featureName) {
+  const result = await getPool().query(
+    `DELETE FROM user_permissions
+     WHERE user_id = $1
+       AND feature_id IN (SELECT id FROM features WHERE name = $2)`,
+    [userId, featureName],
+  );
+  return result.rowCount > 0;
+}
+
+/**
+ * Revoke a user's access to a feature by feature ID.
+ * @param {string} userId
+ * @param {string} featureId
+ * @returns {Promise<boolean>} True if a permission was deleted
+ */
+export async function revokeUserFeatureAccessById(userId, featureId) {
+  const result = await getPool().query(
+    `DELETE FROM user_permissions
+     WHERE user_id = $1 AND feature_id = $2`,
+    [userId, featureId],
+  );
+  return result.rowCount > 0;
+}
+
+/**
+ * Get all feature permissions for a user.
+ * @param {string} userId
+ * @returns {Promise<Array<object>>}
+ */
+export async function getUserPermissions(userId) {
+  const result = await getPool().query(
+    `SELECT up.id, up.user_id, up.feature_id, up.granted_at, up.granted_by,
+            f.name AS feature_name, f.description AS feature_description, f.is_active AS feature_is_active,
+            u.email AS granted_by_email
+     FROM user_permissions up
+     INNER JOIN features f ON f.id = up.feature_id
+     LEFT JOIN users u ON u.id = up.granted_by
+     WHERE up.user_id = $1
+     ORDER BY f.name ASC`,
+    [userId],
+  );
+  return result.rows;
+}
+
+/**
+ * Get all features in the system.
+ * @returns {Promise<Array<object>>}
+ */
+export async function findAllFeatures() {
+  const result = await getPool().query(
+    `SELECT id, name, description, is_active, created_at
+     FROM features
+     ORDER BY name ASC`,
+  );
+  return result.rows;
+}
+
+/**
+ * Find a feature by ID.
+ * @param {string} featureId
+ * @returns {Promise<object | null>}
+ */
+export async function findFeatureById(featureId) {
+  const result = await getPool().query(
+    `SELECT id, name, description, is_active, created_at
+     FROM features
+     WHERE id = $1`,
+    [featureId],
+  );
+  return result.rows[0] ?? null;
+}
+
+/**
+ * Find a feature by name.
+ * @param {string} featureName
+ * @returns {Promise<object | null>}
+ */
+export async function findFeatureByName(featureName) {
+  const result = await getPool().query(
+    `SELECT id, name, description, is_active, created_at
+     FROM features
+     WHERE name = $1`,
+    [featureName],
+  );
+  return result.rows[0] ?? null;
+}
+
+/**
+ * Create a new feature.
+ * @param {string} name
+ * @param {string | null} description
+ * @param {boolean} isActive
+ * @returns {Promise<object>}
+ */
+export async function createFeature(name, description = null, isActive = true) {
+  const result = await getPool().query(
+    `INSERT INTO features (name, description, is_active, created_at)
+     VALUES ($1, $2, $3, NOW())
+     RETURNING id, name, description, is_active, created_at`,
+    [name, description, isActive],
+  );
+  return result.rows[0];
+}
+
+/**
+ * Update a feature.
+ * @param {string} featureId
+ * @param {{ name?: string, description?: string | null, isActive?: boolean }} updates
+ * @returns {Promise<object | null>}
+ */
+export async function updateFeature(featureId, updates) {
+  const result = await getPool().query(
+    `UPDATE features
+     SET
+       name = COALESCE($2, name),
+       description = COALESCE($3, description),
+       is_active = COALESCE($4, is_active)
+     WHERE id = $1
+     RETURNING id, name, description, is_active, created_at`,
+    [
+      featureId,
+      updates.name ?? null,
+      updates.description !== undefined ? updates.description : null,
+      updates.isActive ?? null,
+    ],
+  );
+  return result.rows[0] ?? null;
+}
+
+/**
+ * Get permission overview: all users with their feature permissions.
+ * @returns {Promise<Array<object>>}
+ */
+export async function getPermissionsOverview() {
+  const result = await getPool().query(
+    `SELECT u.id AS user_id, u.email, u.role, u.status,
+            COALESCE(
+              json_agg(
+                json_build_object(
+                  'featureId', f.id,
+                  'featureName', f.name,
+                  'grantedAt', up.granted_at
+                )
+                ORDER BY f.name
+              ) FILTER (WHERE up.id IS NOT NULL),
+              '[]'
+            ) AS permissions
+     FROM users u
+     LEFT JOIN user_permissions up ON up.user_id = u.id
+     LEFT JOIN features f ON f.id = up.feature_id AND f.is_active = true
+     GROUP BY u.id, u.email, u.role, u.status
+     ORDER BY u.email ASC`,
+  );
+  return result.rows;
+}
