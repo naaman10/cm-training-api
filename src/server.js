@@ -26,6 +26,7 @@ if (missing.length > 0) {
 
 const { default: authRoutes } = await import("./routes/auth.js");
 const { default: adminUsersRoutes } = await import("./routes/adminUsers.js");
+const { default: adminPermissionsRoutes } = await import("./routes/adminPermissions.js");
 const { default: healthRoutes } = await import("./routes/health.js");
 const { default: coursesRoutes } = await import("./routes/courses.js");
 
@@ -56,6 +57,7 @@ app.use("/health", healthRoutes);
 
 app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminUsersRoutes);
+app.use("/api/admin", adminPermissionsRoutes);
 app.use("/api/courses", coursesRoutes);
 
 // express-oauth2-jwt-bearer sends 401 for invalid/missing tokens
