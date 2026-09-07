@@ -2,7 +2,7 @@ import { Router } from "express";
 import { checkJwt, loadAppUser } from "../middleware/auth.js";
 import { syncUserOnLogin } from "../middleware/syncUserOnLogin.js";
 import { profileFromAuthPayload } from "../auth/profileFromToken.js";
-import { toSafeUserProfile } from "../db.js";
+import { toSafeUserProfile, getUserPermissions } from "../db.js";
 
 const router = Router();
 
@@ -37,6 +37,14 @@ const router = Router();
  *                   type: string
  *                   nullable: true
  *                   description: Normalized role value parsed from the JWT claim
+ *                 permissions:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ *                   description: List of feature names the user has access to (empty for non-admin users with no grants; admin users have implicit access to all features)
+ *                 isAdmin:
+ *                   type: boolean
+ *                   description: Whether the user has admin role (admins have access to all features)
  *       "400":
  *         description: First login without email claim on access token
  *       "401":
@@ -56,18 +64,32 @@ const router = Router();
  * 1. Auth0 access token proves identity (checkJwt).
  * 2. Neon row is upserted from token claims; **last_login_at** is set (syncUserOnLogin).
  * 3. loadAppUser blocks only **suspended** / **blocked** accounts (403).
- * 4. Returns only safe profile fields for the frontend.
+ * 4. Returns safe profile fields + feature permissions for the frontend.
  *
  * No passwords or registration are handled here.
  */
-router.get("/me", checkJwt, syncUserOnLogin, loadAppUser, (req, res) => {
+router.get("/me", checkJwt, syncUserOnLogin, loadAppUser, async (req, res) => {
   // Identity from Auth0 (req.auth.payload.sub / .permissions); approval from Neon (req.appUser).
   const parsed = profileFromAuthPayload(req.auth?.payload ?? {});
+
+  // Check if user is admin
+  const userRole = req.appUser?.role || "";
+  const roles = userRole.split(",").map((r) => r.trim().toLowerCase()).filter(Boolean);
+  const isAdmin = roles.includes("admin");
+
+  // Get user's feature permissions
+  // Admins have implicit access to all features, but we still return their explicit grants
+  const userPermissions = await getUserPermissions(req.appUser.id);
+  const permissions = userPermissions
+    .filter((p) => p.feature_is_active) // Only return active features
+    .map((p) => p.feature_name);
 
   res.json({
     user: toSafeUserProfile(req.appUser),
     auth0RoleClaim: process.env.AUTH0_ROLES_CLAIM ?? null,
     auth0RoleFromToken: parsed.rolesFromAuth0,
+    permissions,
+    isAdmin,
   });
 });
 
